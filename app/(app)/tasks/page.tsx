@@ -10,6 +10,7 @@ import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskCalendar } from "@/components/tasks/TaskCalendar";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskDetailPanel } from "@/components/tasks/TaskDetailPanel";
+import { sortTasks } from "@/lib/taskSort";
 import { cn } from "@/lib/utils";
 
 type View = "board" | "calendar" | "split" | "list";
@@ -67,7 +68,7 @@ export default function TasksPage() {
 
   const filtered = useMemo(
     () =>
-      (tasks ?? []).filter((t) => !areaFilter || t.lifeAreaId === areaFilter),
+      sortTasks((tasks ?? []).filter((t) => !areaFilter || t.lifeAreaId === areaFilter)),
     [tasks, areaFilter],
   );
 

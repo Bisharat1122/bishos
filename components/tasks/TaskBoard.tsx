@@ -49,8 +49,9 @@ export function TaskBoard({
   const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null);
   const [dropAt, setDropAt] = useState<DropAt | null>(null);
 
-  const colTasksOf = (status: Status) =>
-    tasks.filter((t) => t.status === status).sort((a, b) => eff(b) - eff(a));
+  // `tasks` arrive pre-sorted by the canonical comparator (priority → due →
+  // order), so high-priority / soon-due tasks stay on top. We only filter here.
+  const colTasksOf = (status: Status) => tasks.filter((t) => t.status === status);
 
   /** Order value that places the dragged task at the indicated slot. */
   function computeOrder(status: Status, targetId: Id<"tasks"> | null, before: boolean): number {
