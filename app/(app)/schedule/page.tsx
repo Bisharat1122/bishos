@@ -100,9 +100,7 @@ export default function SchedulePage() {
       <div className="px-4 py-6 sm:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-              <CalendarDays className="h-6 w-6 text-primary" /> Schedule
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Time-block your day and link it to tasks, projects, goals & life areas.
             </p>

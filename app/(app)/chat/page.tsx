@@ -10,6 +10,7 @@ import {
   Copy, Check, NotebookPen, FileText,
 } from "lucide-react";
 import { MarkdownLite } from "@/components/tasks/MarkdownLite";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AiDots } from "@/components/Skeleton";
 import { SaveToNotesModal } from "@/components/chat/SaveToNotesModal";
 import { extractFileText } from "@/lib/extractFile";
@@ -461,11 +462,11 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/30 px-3 py-2">
+          <div className="flex items-end gap-2 rounded-2xl border border-border bg-muted/30 px-3 py-2">
             <button
               onClick={() => fileRef.current?.click()}
               title="Attach a document (PDF, Word, PowerPoint, Excel, text) for the AI to analyze"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
             >
               {extracting ? (
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -473,21 +474,22 @@ export default function ChatPage() {
                 <Plus className="h-4 w-4" />
               )}
             </button>
-            <input
+            <AutoGrowTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === "Enter" && !e.shiftKey) {
                   if (slashQuery !== null && slashItems.length > 0) {
                     e.preventDefault();
                     pickContext(slashItems[0]);
                   } else {
-                    send();
+                    e.preventDefault();
+                    void send();
                   }
                 }
               }}
               placeholder="Ask anything…  ( / to attach context · + to upload a file )"
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground"
             />
             {isStreaming && streamingMsg ? (
               <button onClick={() => void stopStream({ messageId: streamingMsg._id })} title="Stop" className="flex h-9 w-9 items-center justify-center rounded-full bg-warning text-background">

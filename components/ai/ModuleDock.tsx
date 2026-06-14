@@ -8,6 +8,7 @@ import {
   Sparkles, X, Send, Check, Ban, Loader2, Trash2, CornerDownLeft,
 } from "lucide-react";
 import { MarkdownLite } from "@/components/tasks/MarkdownLite";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AiDots } from "@/components/Skeleton";
 import { cn } from "@/lib/utils";
 
@@ -232,7 +233,7 @@ export function ModuleDock({ module }: { module: string }) {
           {/* Composer */}
           <div className="border-t border-border p-2">
             <div className="flex items-end gap-2 rounded-xl border border-border bg-background px-2 py-1.5">
-              <textarea
+              <AutoGrowTextarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -241,9 +242,9 @@ export function ModuleDock({ module }: { module: string }) {
                     void send();
                   }
                 }}
-                rows={1}
+                maxRows={5}
                 placeholder={`Message the ${module} assistant…`}
-                className="max-h-28 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                className="flex-1 bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground"
               />
               <button
                 onClick={() => void send()}
