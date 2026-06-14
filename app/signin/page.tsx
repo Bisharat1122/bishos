@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
+import { ConvexError } from "convex/values";
 import { Sparkles } from "lucide-react";
 
 export default function SignInPage() {
@@ -38,11 +39,19 @@ export default function SignInPage() {
             try {
               await signIn("password", formData);
               router.push("/dashboard");
-            } catch {
+            } catch (err) {
+              // Surface the real reason (ConvexError messages reach the client).
+              const msg =
+                err instanceof ConvexError
+                  ? String(err.data)
+                  : err instanceof Error && err.message && !/Server Error/i.test(err.message)
+                    ? err.message
+                    : "";
               setError(
-                step === "signIn"
-                  ? "Invalid credentials."
-                  : "Could not create account.",
+                msg ||
+                  (step === "signIn"
+                    ? "Invalid email or password."
+                    : "Could not create account. The email may already be registered."),
               );
             } finally {
               setLoading(false);
@@ -61,9 +70,13 @@ export default function SignInPage() {
             name="password"
             type="password"
             required
+            minLength={step === "signUp" ? 6 : undefined}
             placeholder="Password"
             className="w-full rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm outline-none focus:border-primary/60"
           />
+          {step === "signUp" && (
+            <p className="text-xs text-muted-foreground">At least 6 characters.</p>
+          )}
           {error && <p className="text-sm text-warning">{error}</p>}
           <button
             disabled={loading}
