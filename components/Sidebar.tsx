@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/life-areas", label: "Life Areas", icon: Layers },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/projects", label: "Projects", icon: FolderKanban },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/notes", label: "Notes", icon: StickyNote },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/momentum", label: "Momentum", icon: TrendingUp },

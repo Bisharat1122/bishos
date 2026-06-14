@@ -21,17 +21,24 @@ const TF_META: Record<Timeframe, string> = {
 export default function GoalsPage() {
   const areas = useQuery(api.lifeAreas.list);
   const goals = useQuery(api.goals.list);
+  const projects = useQuery(api.projects.list);
   const createGoal = useMutation(api.goals.create);
 
   const [addOpen, setAddOpen] = useState(false);
   const [title, setTitle] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [areaId, setAreaId] = useState("");
   const [timeframe, setTimeframe] = useState<Timeframe>("monthly");
 
   const areaName = (id: Id<"lifeAreas">) =>
     areas?.find((a) => a._id === id)?.name;
 
+  // Optional project → life area inherits from it.
+  const chosenProject = projects?.find((p) => p._id === projectId);
+  const effectiveAreaId = chosenProject ? chosenProject.lifeAreaId : (areaId as Id<"lifeAreas"> | "");
+
   const openAdd = () => {
+    setProjectId("");
     setAreaId(areas?.[0]?._id ?? "");
     setTitle("");
     setAddOpen(true);
@@ -39,8 +46,13 @@ export default function GoalsPage() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !areaId) return;
-    void createGoal({ title: title.trim(), lifeAreaId: areaId as Id<"lifeAreas">, timeframe });
+    if (!title.trim() || !effectiveAreaId) return;
+    void createGoal({
+      title: title.trim(),
+      lifeAreaId: effectiveAreaId as Id<"lifeAreas">,
+      projectId: projectId ? (projectId as Id<"projects">) : undefined,
+      timeframe,
+    });
     setTitle("");
     setAddOpen(false);
   }
@@ -111,19 +123,39 @@ export default function GoalsPage() {
               placeholder="Goal title…"
               className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-primary/60"
             />
+            {/* Optional project — if set, the life area is inherited from it */}
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
+            >
+              <option value="">No project (goal stands on its own)</option>
+              {projects?.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
             <div className="grid grid-cols-2 gap-3">
-              <select
-                value={areaId}
-                onChange={(e) => setAreaId(e.target.value)}
-                className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
-              >
-                <option value="">Life area…</option>
-                {areas?.map((a) => (
-                  <option key={a._id} value={a._id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+              {chosenProject ? (
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm">
+                  <span className="text-xs text-muted-foreground">Life area</span>
+                  <span className="font-medium">{areaName(chosenProject.lifeAreaId) ?? "—"}</span>
+                </div>
+              ) : (
+                <select
+                  value={areaId}
+                  onChange={(e) => setAreaId(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
+                >
+                  <option value="">Life area…</option>
+                  {areas?.map((a) => (
+                    <option key={a._id} value={a._id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 value={timeframe}
                 onChange={(e) => setTimeframe(e.target.value as Timeframe)}
@@ -136,7 +168,7 @@ export default function GoalsPage() {
               </select>
             </div>
             <button
-              disabled={!title.trim() || !areaId}
+              disabled={!title.trim() || !effectiveAreaId}
               className="w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               Add goal

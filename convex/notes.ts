@@ -146,6 +146,7 @@ export const update = mutation({
     lifeAreaId: v.optional(v.union(v.id("lifeAreas"), v.null())),
     sectionId: v.optional(v.union(v.id("sections"), v.null())),
     tags: v.optional(v.array(v.string())),
+    linkedProjectIds: v.optional(v.array(v.id("projects"))),
     attachments: v.optional(v.array(attachmentValidator)),
   },
   handler: async (ctx, { id, ...rest }) => {

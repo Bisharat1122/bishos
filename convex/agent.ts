@@ -41,7 +41,8 @@ const GOAL_TOOLS = [
         properties: {
           title: { type: "string", description: "Short, action-oriented goal title" },
           description: { type: "string" },
-          lifeArea: { type: "string", description: "Name of one of the user's existing life areas" },
+          project: { type: "string", description: "Title of an existing project to attach to — life area is inherited (optional)" },
+          lifeArea: { type: "string", description: "Life area name — only for standalone goals not tied to a project" },
           timeframe: { type: "string", enum: [...TIMEFRAMES] },
           deadline: { type: "string", description: "Deadline as ISO date YYYY-MM-DD (optional)" },
           specific: { type: "string", description: "SMART: what exactly will be accomplished" },
@@ -167,7 +168,8 @@ const NOTE_TOOLS = [
         properties: {
           title: { type: "string" },
           content: { type: "string", description: "Markdown body" },
-          lifeArea: { type: "string", description: "Name of an existing life area (optional)" },
+          project: { type: "string", description: "Title of an existing project to link — life area is inherited (optional)" },
+          lifeArea: { type: "string", description: "Life area name — only if not linking a project (optional)" },
           tags: { type: "array", items: { type: "string" } },
         },
         required: ["title"],
@@ -685,7 +687,16 @@ async function execAction(
   };
 
   if (tool === "createGoal") {
-    const area = matchArea(str(args.lifeArea));
+    const gprojects = await ctx.db
+      .query("projects")
+      .withIndex("by_user", (q: { eq: (a: string, b: unknown) => unknown }) => q.eq("userId", userId))
+      .collect();
+    const gproject = byTitle(gprojects, str(args.project)) as
+      | { _id: Id<"projects">; lifeAreaId: Id<"lifeAreas"> }
+      | undefined;
+    const area = gproject
+      ? areas.find((a: { _id: Id<"lifeAreas"> }) => a._id === gproject.lifeAreaId)
+      : matchArea(str(args.lifeArea));
     if (!area) throw new Error("No life area exists yet — create one first.");
     const milestones = (Array.isArray(args.milestones) ? args.milestones : [])
       .map((m) => str(m))
@@ -704,6 +715,7 @@ async function execAction(
       title: str(args.title) ?? "Untitled goal",
       description: str(args.description),
       lifeAreaId: area._id,
+      projectId: gproject?._id,
       timeframe: tf(args.timeframe),
       deadline: parseDeadline(args.deadline),
       tags: [],
@@ -809,7 +821,18 @@ async function execAction(
       .collect();
 
     if (tool === "createNote") {
-      const area = str(args.lifeArea) ? matchArea(str(args.lifeArea)) : undefined;
+      const nprojects = await ctx.db
+        .query("projects")
+        .withIndex("by_user", (q: { eq: (a: string, b: unknown) => unknown }) => q.eq("userId", userId))
+        .collect();
+      const nproject = byTitle(nprojects, str(args.project)) as
+        | { _id: Id<"projects">; lifeAreaId: Id<"lifeAreas"> }
+        | undefined;
+      const area = nproject
+        ? areas.find((a: { _id: Id<"lifeAreas"> }) => a._id === nproject.lifeAreaId)
+        : str(args.lifeArea)
+          ? matchArea(str(args.lifeArea))
+          : undefined;
       const content = str(args.content) ?? "";
       const tags = (Array.isArray(args.tags) ? args.tags : [])
         .map((t) => str(t))
@@ -819,6 +842,7 @@ async function execAction(
         title: str(args.title) ?? "Untitled note",
         content,
         lifeAreaId: area?._id,
+        linkedProjectIds: nproject ? [nproject._id] : undefined,
         tags: tags.length ? tags : undefined,
       });
       const linkedNoteIds = await resolveLinks(ctx, userId, content, id);

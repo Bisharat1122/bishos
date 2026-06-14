@@ -37,6 +37,7 @@ export default function NotePage() {
   const allTitles = useQuery(api.notes.titles);
   const connections = useQuery(api.notes.connections, { id });
   const areas = useQuery(api.lifeAreas.list);
+  const projects = useQuery(api.projects.list);
   const sections = useQuery(api.sections.list, {});
   const update = useMutation(api.notes.update);
   const createNote = useMutation(api.notes.create);
@@ -91,6 +92,7 @@ export default function NotePage() {
   const tags = note.tags ?? [];
   const attachments = (note.attachments ?? []) as Attachment[];
   const areaSections = sections?.filter((s) => s.lifeAreaId === note.lifeAreaId) ?? [];
+  const linkedProject = projects?.find((p) => (note.linkedProjectIds ?? []).includes(p._id));
 
   function openByTitle(title: string) {
     const match = allTitles?.find(
@@ -285,24 +287,53 @@ export default function NotePage() {
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Organize
               </h3>
+              {/* Project — optional; if set, the life area is inherited from it */}
               <select
-                value={note.lifeAreaId ?? ""}
-                onChange={(e) =>
-                  void update({
-                    id,
-                    lifeAreaId: e.target.value ? (e.target.value as Id<"lifeAreas">) : null,
-                    sectionId: null,
-                  })
-                }
+                value={linkedProject?._id ?? ""}
+                onChange={(e) => {
+                  const proj = projects?.find((p) => p._id === e.target.value);
+                  if (proj) {
+                    void update({ id, linkedProjectIds: [proj._id], lifeAreaId: proj.lifeAreaId, sectionId: null });
+                  } else {
+                    void update({ id, linkedProjectIds: [] });
+                  }
+                }}
                 className="mb-2 w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none"
               >
-                <option value="">No life area</option>
-                {areas?.map((a) => (
-                  <option key={a._id} value={a._id}>
-                    {a.name}
+                <option value="">No project</option>
+                {projects?.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.title}
                   </option>
                 ))}
               </select>
+              {linkedProject ? (
+                <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-2 py-1.5 text-sm">
+                  <span className="text-xs text-muted-foreground">Life area</span>
+                  <span className="font-medium">
+                    {areas?.find((a) => a._id === note.lifeAreaId)?.name ?? "—"}
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={note.lifeAreaId ?? ""}
+                  onChange={(e) =>
+                    void update({
+                      id,
+                      lifeAreaId: e.target.value ? (e.target.value as Id<"lifeAreas">) : null,
+                      sectionId: null,
+                    })
+                  }
+                  className="mb-2 w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none"
+                >
+                  <option value="">No life area</option>
+                  {areas?.map((a) => (
+                    <option key={a._id} value={a._id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 value={note.sectionId ?? ""}
                 onChange={(e) =>
