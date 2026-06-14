@@ -189,7 +189,7 @@ export function BarChart({
   );
 }
 
-/** Line chart for trends (e.g. energy/mood over time). */
+/** Line chart for trends (e.g. energy/mood over time), with a hover tooltip. */
 export function LineChart({
   data,
   height = 160,
@@ -202,6 +202,7 @@ export function LineChart({
   unit?: string;
 }) {
   const [ref, W] = useWidth();
+  const [hover, setHover] = useState<number | null>(null);
   const pad = { l: 28, r: 10, t: 12, b: 22 };
   const cw = Math.max(10, W - pad.l - pad.r);
   const ch = height - pad.t - pad.b;
@@ -212,8 +213,23 @@ export function LineChart({
   const pts = data.map((d, i) => `${x(i)},${y(d.value)}`).join(" ");
   const labelEvery = Math.ceil(n / 8);
 
+  function onMove(e: React.MouseEvent) {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < data.length; i++) {
+      const d = Math.abs(x(i) - mx);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    setHover(best);
+  }
+
+  const hv = hover != null ? data[hover] : null;
+
   return (
-    <div ref={ref} className="w-full">
+    <div ref={ref} className="relative w-full">
       {data.length === 0 ? (
         <div className="flex items-center justify-center rounded-xl border border-dashed border-border" style={{ height }}>
           <span className="text-sm text-muted-foreground">No data yet.</span>
@@ -231,12 +247,16 @@ export function LineChart({
               </g>
             );
           })}
+
+          {/* hover guide line */}
+          {hover != null && (
+            <line x1={x(hover)} y1={pad.t} x2={x(hover)} y2={pad.t + ch} stroke="hsl(var(--primary))" strokeWidth={1} opacity={0.35} />
+          )}
+
           <polyline points={pts} fill="none" stroke="hsl(var(--primary))" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           {data.map((d, i) => (
             <g key={i}>
-              <circle cx={x(i)} cy={y(d.value)} r={3} fill="hsl(var(--primary))">
-                <title>{d.label}: {d.value}{unit}</title>
-              </circle>
+              <circle cx={x(i)} cy={y(d.value)} r={hover === i ? 5 : 3} fill="hsl(var(--primary))" />
               {i % labelEvery === 0 && (
                 <text x={x(i)} y={height - 6} textAnchor="middle" className="fill-muted-foreground text-[9px]">
                   {d.label}
@@ -244,7 +264,29 @@ export function LineChart({
               )}
             </g>
           ))}
+
+          {/* full-width hover capture */}
+          <rect
+            x={pad.l}
+            y={pad.t}
+            width={cw}
+            height={ch}
+            fill="transparent"
+            onMouseMove={onMove}
+            onMouseLeave={() => setHover(null)}
+          />
         </svg>
+      )}
+
+      {/* tooltip */}
+      {hv && hover != null && (
+        <div
+          className="pointer-events-none absolute z-30 -translate-x-1/2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-center shadow-xl"
+          style={{ left: Math.min(Math.max(40, x(hover)), W - 40), top: Math.max(0, y(hv.value) - 46) }}
+        >
+          <p className="text-sm font-semibold tabular-nums">{hv.value}{unit}</p>
+          <p className="text-[10px] text-muted-foreground">{hv.label}</p>
+        </div>
       )}
     </div>
   );
