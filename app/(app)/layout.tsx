@@ -6,7 +6,6 @@ import { Menu, X, Sparkles } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { ModuleDockMount } from "@/components/ai/ModuleDockMount";
 import { FocusTimerProvider } from "@/components/focus/FocusTimerProvider";
-import { DailyFlowDock } from "@/components/dailyflow/DailyFlowDock";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -90,8 +89,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Floating per-module agentic assistant (renders only on module routes) */}
       <ModuleDockMount />
-      {/* Guided daily ritual — bottom-left, every page */}
-      <DailyFlowDock />
     </div>
     </FocusTimerProvider>
   );

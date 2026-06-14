@@ -6,6 +6,7 @@ import { GlobalSearch } from "./GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
 import { ProfileButton } from "./ProfileButton";
 import { FocusTimerPill } from "./focus/FocusTimerPill";
+import { DailyFlowButton } from "./dailyflow/DailyFlowDock";
 import { cn } from "@/lib/utils";
 
 export function Card({
@@ -47,6 +48,7 @@ export function Topbar({ action }: { title?: string; action?: ReactNode }) {
 
       {/* Right-aligned actions */}
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+        <DailyFlowButton />
         {action}
         <FocusTimerPill />
         <button

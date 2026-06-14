@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -29,23 +29,16 @@ const STEPS: Step[] = [
 
 const ymdLocal = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const VIEW_KEY = "bishos.dailyFlow.view";
 
-export function DailyFlowDock() {
+/** Daily Flow indicator in the Topbar (glows while steps remain) + dropdown
+ * that walks the guided ritual one step at a time. */
+export function DailyFlowButton() {
   const today = ymdLocal(new Date());
   const data = useQuery(api.dailyFlow.today, { date: today });
   const streak = useQuery(api.dailyFlow.streak, {});
   const completeStep = useMutation(api.dailyFlow.completeStep);
   const reset = useMutation(api.dailyFlow.reset);
-
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    setOpen(localStorage.getItem(VIEW_KEY) === "open");
-  }, []);
-  const setView = (o: boolean) => {
-    setOpen(o);
-    try { localStorage.setItem(VIEW_KEY, o ? "open" : "pill"); } catch { /* ignore */ }
-  };
 
   const doneSet = new Set(data?.done ?? []);
   if (data?.checkInDone) doneSet.add("checkin");
@@ -55,64 +48,65 @@ export function DailyFlowDock() {
   const current = STEPS.find((s) => !doneSet.has(s.key)) ?? null;
   const allDone = !current;
 
-  function finish(key: string) {
-    void completeStep({ date: today, key });
-  }
-
-  // ---- minimized pill ----
-  if (!open) {
-    return (
+  return (
+    <div className="relative">
       <button
-        onClick={() => setView(true)}
-        title="Daily Flow"
-        className="fixed bottom-5 left-5 z-40 flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-1.5 pr-3 shadow-lg transition hover:border-primary/50"
+        onClick={() => setOpen((o) => !o)}
+        title="Daily Flow — your guided daily ritual"
+        className={cn(
+          "flex h-10 items-center gap-2 rounded-full border pl-1.5 pr-1.5 transition sm:pr-3",
+          allDone
+            ? "border-primary/40 bg-primary/10"
+            : "border-primary/30 daily-glow hover:brightness-110",
+        )}
       >
         <Ring pct={pct} done={allDone} />
-        <span className="text-sm font-medium">Daily Flow</span>
-        <span className="text-xs text-muted-foreground">{totalDone}/{STEPS.length}</span>
+        <span className="hidden text-sm font-medium sm:inline">Daily Flow</span>
+        <span className="hidden text-xs text-muted-foreground sm:inline">{totalDone}/{STEPS.length}</span>
       </button>
-    );
-  }
 
-  // ---- expanded card ----
-  return (
-    <div className="fixed bottom-5 left-5 z-40 w-[min(360px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Ring pct={pct} done={allDone} small />
-        <div className="leading-tight">
-          <p className="text-sm font-semibold">Daily Flow</p>
-          <p className="text-[11px] text-muted-foreground">{totalDone} of {STEPS.length} done today</p>
-        </div>
-        {!!streak && streak > 0 && (
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
-            <Flame className="h-3.5 w-3.5" /> {streak}
-          </span>
-        )}
-        <button onClick={() => setView(false)} className={cn("rounded p-1 text-muted-foreground hover:text-foreground", !(streak && streak > 0) && "ml-auto")}>
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-2 w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <Ring pct={pct} done={allDone} small />
+              <div className="leading-tight">
+                <p className="text-sm font-semibold">Daily Flow</p>
+                <p className="text-[11px] text-muted-foreground">{totalDone} of {STEPS.length} done today</p>
+              </div>
+              {!!streak && streak > 0 && (
+                <span className="ml-auto flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                  <Flame className="h-3.5 w-3.5" /> {streak}
+                </span>
+              )}
+              <button onClick={() => setOpen(false)} className={cn("rounded p-1 text-muted-foreground hover:text-foreground", !(streak && streak > 0) && "ml-auto")}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-      {allDone ? (
-        <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-          <PartyPopper className="h-8 w-8 text-primary" />
-          <p className="font-semibold">Daily Flow complete</p>
-          <p className="text-sm text-muted-foreground">Everything reviewed and planned. Shutdown complete.</p>
-          <button
-            onClick={() => void reset({ date: today })}
-            className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <RotateCcw className="h-3.5 w-3.5" /> Run it again
-          </button>
-        </div>
-      ) : (
-        <CurrentStep step={current!} onDone={() => finish(current!.key)} />
+            {allDone ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                <PartyPopper className="h-8 w-8 text-primary" />
+                <p className="font-semibold">Daily Flow complete</p>
+                <p className="text-sm text-muted-foreground">Everything reviewed and planned. Shutdown complete.</p>
+                <button
+                  onClick={() => void reset({ date: today })}
+                  className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Run it again
+                </button>
+              </div>
+            ) : (
+              <CurrentStep step={current!} onDone={() => void completeStep({ date: today, key: current!.key })} />
+            )}
+
+            <div className="h-1 w-full bg-muted">
+              <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        </>
       )}
-
-      {/* progress bar */}
-      <div className="h-1 w-full bg-muted">
-        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-      </div>
     </div>
   );
 }
