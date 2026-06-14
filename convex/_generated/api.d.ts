@@ -13,6 +13,7 @@ import type * as ai from "../ai.js";
 import type * as aiThreads from "../aiThreads.js";
 import type * as auth from "../auth.js";
 import type * as checkins from "../checkins.js";
+import type * as dailyFlow from "../dailyFlow.js";
 import type * as dashboard from "../dashboard.js";
 import type * as files from "../files.js";
 import type * as focus from "../focus.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   aiThreads: typeof aiThreads;
   auth: typeof auth;
   checkins: typeof checkins;
+  dailyFlow: typeof dailyFlow;
   dashboard: typeof dashboard;
   files: typeof files;
   focus: typeof focus;

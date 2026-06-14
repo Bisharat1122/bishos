@@ -284,6 +284,14 @@ export default defineSchema({
     relatedIds: v.optional(v.array(v.string())),
   }).index("by_type", ["userId", "type"]),
 
+  // "Daily Flow" — the guided daily ritual (Morning Start + Evening Shutdown).
+  // One doc per day; `done` holds the keys of completed/skipped steps.
+  dailyFlow: defineTable({
+    userId: v.id("users"),
+    date: v.string(), // YYYY-MM-DD (client-local)
+    done: v.array(v.string()),
+  }).index("by_date", ["userId", "date"]),
+
   // Single-user profile — also feeds the AI chat so it knows who Bish is.
   profiles: defineTable({
     userId: v.id("users"),
