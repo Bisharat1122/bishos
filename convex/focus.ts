@@ -199,7 +199,10 @@ export const rangeAnalytics = query({
       if (task) {
         ikey = "t:" + s.taskId;
         label = task.title;
-        sub = task.sectionId ? sectionName(task.sectionId) : areaMeta(areaId).name;
+        const projId = s.projectId ?? task.projectId;
+        const projTitle = projId ? projById.get(projId)?.title : undefined;
+        const where = task.sectionId ? sectionName(task.sectionId) : areaMeta(areaId).name;
+        sub = [projTitle, where].filter(Boolean).join(" · ");
       } else if (project) {
         ikey = "p:" + s.projectId;
         label = project.title;
