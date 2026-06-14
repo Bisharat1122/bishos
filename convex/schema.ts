@@ -281,6 +281,19 @@ export default defineSchema({
     relatedIds: v.optional(v.array(v.string())),
   }).index("by_type", ["userId", "type"]),
 
+  // Single-user profile — also feeds the AI chat so it knows who Bish is.
+  profiles: defineTable({
+    userId: v.id("users"),
+    name: v.optional(v.string()),
+    city: v.optional(v.string()),
+    occupation: v.optional(v.string()), // what he's doing / role
+    business: v.optional(v.string()),
+    situation: v.optional(v.string()), // current situation
+    about: v.optional(v.string()), // detailed multi-paragraph bio
+    preferences: v.optional(v.string()), // preferences / needs / how AI should help
+    avatarId: v.optional(v.id("_storage")),
+  }).index("by_user", ["userId"]),
+
   // Notifications are computed on the fly from deadlines/streaks/reminders.
   // This table only records which computed alerts the user has dismissed
   // (keyed by a stable notification key).

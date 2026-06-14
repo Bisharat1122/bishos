@@ -24,7 +24,7 @@ export const gatherContext = internalQuery({
       return { weekStart: d.getTime() };
     })();
 
-    const [areas, tasks, projects, goals, notes, habits, focus, hcompletions, checkins] =
+    const [areas, tasks, projects, goals, notes, habits, focus, hcompletions, checkins, profile] =
       await Promise.all([
         ctx.db.query("lifeAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
         ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
@@ -35,7 +35,22 @@ export const gatherContext = internalQuery({
         ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
         ctx.db.query("habitCompletions").withIndex("by_date", (q) => q.eq("userId", userId)).collect(),
         ctx.db.query("dailyCheckIns").withIndex("by_date", (q) => q.eq("userId", userId)).collect(),
+        ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", userId)).first(),
       ]);
+
+    const profileStr = profile
+      ? [
+          profile.name ? `Name: ${profile.name}` : "",
+          profile.city ? `City: ${profile.city}` : "",
+          profile.occupation ? `Does: ${profile.occupation}` : "",
+          profile.business ? `Business: ${profile.business}` : "",
+          profile.situation ? `Current situation: ${profile.situation}` : "",
+          profile.about ? `About: ${profile.about.slice(0, 2500)}` : "",
+          profile.preferences ? `How he wants help: ${profile.preferences.slice(0, 1200)}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "No profile filled in yet.";
 
     const areaName = (id?: string) => areas.find((a) => a._id === id)?.name ?? "—";
     const open = tasks.filter((t) => t.status !== "done");
@@ -58,6 +73,7 @@ export const gatherContext = internalQuery({
       .sort((a, b) => (a.dueDate ?? 0) - (b.dueDate ?? 0));
 
     return [
+      `=== WHO YOU'RE TALKING TO (profile) ===\n${profileStr}`,
       `LIFE AREAS: ${areas.map((a) => a.name).join(", ") || "none"}.`,
       `TODAY'S TASKS (${open.length} open): ` +
         open.slice(0, 15).map((t) => `[${t.priority}] ${t.title} (${areaName(t.lifeAreaId)})`).join("; "),
@@ -119,6 +135,7 @@ function buildSystemPrompt(context: string, focused: string): string {
   return [
     "You are bishOS — Bish's lifelong second brain and Life OS.",
     "You know everything in his system and speak in his voice: direct, sharp, practical.",
+    "Use the PROFILE below to address him by name and tailor every answer to his city, business, and current situation. Reference these facts naturally; never ask him for details that are already in his profile.",
     "Use the life-state below as background memory. Be concise and actionable. When he asks",
     "'what's going on in my life', cover: today's tasks, projects, goals, focus, habits, deadlines, recent learning, and one clear suggestion.",
     "",

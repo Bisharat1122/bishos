@@ -33,7 +33,18 @@ export default function GoalPage() {
   const areas = useQuery(api.lifeAreas.list);
   const update = useMutation(api.goals.update);
   const addMilestone = useMutation(api.goals.addMilestone);
-  const toggleMilestone = useMutation(api.goals.toggleMilestone);
+  const toggleMilestone = useMutation(api.goals.toggleMilestone).withOptimisticUpdate((store, { index }) => {
+    const g = store.getQuery(api.goals.get, { id });
+    if (!g) return;
+    const milestones = g.milestones.map((m, i) => (i === index ? { ...m, done: !m.done } : m));
+    const progress =
+      g.metric && g.metric.target > 0
+        ? g.progress
+        : milestones.length
+          ? Math.round((milestones.filter((m) => m.done).length / milestones.length) * 100)
+          : 0;
+    store.setQuery(api.goals.get, { id }, { ...g, milestones, progress });
+  });
   const removeMilestone = useMutation(api.goals.removeMilestone);
   const removeGoal = useMutation(api.goals.remove);
   const aiBreakdown = useAction(api.ai.goalMilestones);

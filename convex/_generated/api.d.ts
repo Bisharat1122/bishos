@@ -25,6 +25,7 @@ import type * as momentum from "../momentum.js";
 import type * as notes from "../notes.js";
 import type * as notifications from "../notifications.js";
 import type * as openrouter from "../openrouter.js";
+import type * as profile from "../profile.js";
 import type * as projects from "../projects.js";
 import type * as range from "../range.js";
 import type * as reviews from "../reviews.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   notifications: typeof notifications;
   openrouter: typeof openrouter;
+  profile: typeof profile;
   projects: typeof projects;
   range: typeof range;
   reviews: typeof reviews;

@@ -20,7 +20,11 @@ const minToLabel = (m: number) => {
 export function TodaySchedule({ className }: { className?: string }) {
   const today = ymdLocal(new Date());
   const blocks = useQuery(api.schedule.day, { date: today });
-  const setStatus = useMutation(api.schedule.setStatus);
+  const setStatus = useMutation(api.schedule.setStatus).withOptimisticUpdate((store, { id, status }) => {
+    const cur = store.getQuery(api.schedule.day, { date: today });
+    if (!cur) return;
+    store.setQuery(api.schedule.day, { date: today }, cur.map((b) => (b._id === id ? { ...b, status } : b)));
+  });
   const areas = useQuery(api.lifeAreas.list);
   const areaName = (id?: string) => areas?.find((a) => a._id === id)?.name;
 

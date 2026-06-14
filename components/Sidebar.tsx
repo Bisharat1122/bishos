@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -17,10 +18,12 @@ import {
   CalendarRange,
   ClipboardList,
   TrendingUp,
+  UserRound,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
+import { Modal } from "./ui";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -52,6 +55,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { signOut } = useAuthActions();
+  const [confirmOut, setConfirmOut] = useState(false);
 
   return (
     <aside
@@ -122,17 +126,57 @@ export function Sidebar({
         })}
       </nav>
 
-      <button
-        onClick={() => void signOut()}
-        title={collapsed ? "Sign out" : undefined}
-        className={cn(
-          "mt-auto flex items-center gap-3 rounded-full py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-          collapsed ? "justify-center px-0" : "px-3",
-        )}
-      >
-        <LogOut className="h-4 w-4" />
-        {!collapsed && "Sign out"}
-      </button>
+      <div className="mt-auto flex flex-col gap-1">
+        <Link
+          href="/profile"
+          onClick={() => { if (pathname !== "/profile") onNavStart?.(); onNavigate?.(); }}
+          title={collapsed ? "Profile" : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-full py-2.5 text-sm font-medium transition-colors",
+            collapsed ? "justify-center px-0" : "px-3",
+            pathname === "/profile"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <UserRound className="h-4 w-4" />
+          {!collapsed && "Profile"}
+        </Link>
+
+        <button
+          onClick={() => setConfirmOut(true)}
+          title={collapsed ? "Sign out" : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-full py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            collapsed ? "justify-center px-0" : "px-3",
+          )}
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed && "Sign out"}
+        </button>
+      </div>
+
+      {confirmOut && (
+        <Modal title="Sign out?" onClose={() => setConfirmOut(false)}>
+          <p className="text-sm text-muted-foreground">
+            You&apos;ll need to sign back in with your email and password to access bishOS.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setConfirmOut(false)}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void signOut()}
+              className="flex items-center gap-2 rounded-lg bg-warning px-4 py-2 text-sm font-medium text-background"
+            >
+              <LogOut className="h-4 w-4" /> Sign out
+            </button>
+          </div>
+        </Modal>
+      )}
     </aside>
   );
 }

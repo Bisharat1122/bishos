@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
+import { ProfileButton } from "./ProfileButton";
 import { cn } from "@/lib/utils";
 
 export function Card({
@@ -54,9 +55,7 @@ export function Topbar({ action }: { title?: string; action?: ReactNode }) {
           {fs ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
         <NotificationBell />
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning text-sm font-semibold text-background">
-          B
-        </div>
+        <ProfileButton />
       </div>
     </div>
   );
