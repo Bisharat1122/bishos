@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
@@ -155,6 +155,17 @@ export function TaskCalendar({
 const timeLabel = (ts: number) =>
   new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
+const HOUR_PX = 48;
+const tsMin = (ts: number) => {
+  const d = new Date(ts);
+  return d.getHours() * 60 + d.getMinutes();
+};
+const hourLabel = (h: number) => {
+  const ap = h < 12 ? "AM" : "PM";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${hh} ${ap}`;
+};
+
 function Chip({
   task,
   onClick,
@@ -233,56 +244,87 @@ function ColumnsView({
   onChipClick: (id: Id<"tasks">) => void;
   compact?: boolean;
 }) {
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // open the grid around the working day
+    if (scrollRef.current) scrollRef.current.scrollTop = 7 * HOUR_PX;
+  }, []);
+
   return (
-    <div
-      className="grid flex-1 gap-2 overflow-y-auto"
-      style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}
-    >
-      {columns.map((day) => {
-        const dayTasks = tasksOn(day);
-        return (
-          <DayDropZone
-            key={day.toISOString()}
-            day={day}
-            tasks={dayTasks}
-            onDropTask={onDropTask}
-            className="flex flex-col rounded-xl border border-border bg-card/40"
-          >
-            <div
-              className={cn(
-                "border-b border-border px-2 py-1.5 text-center",
-                isToday(day) && "bg-primary/10",
-              )}
-            >
-              <div className="text-[10px] uppercase text-muted-foreground">
-                {WEEKDAYS[day.getDay()]}
-              </div>
-              <div
-                className={cn(
-                  "text-sm font-semibold",
-                  isToday(day) && "text-primary",
-                )}
-              >
-                {day.getDate()}
-              </div>
-            </div>
-            <div
-              className={cn(
-                "flex flex-1 flex-col gap-1 p-1.5",
-                compact ? "min-h-[120px]" : "min-h-[320px]",
-              )}
-            >
-              {dayTasks.map((t) => (
-                <Chip
-                  key={t._id}
-                  task={t}
-                  onClick={() => onChipClick(t._id)}
-                />
+    <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+      {/* day headers */}
+      <div className="flex border-b border-border">
+        <div className="w-14 shrink-0" />
+        {columns.map((day) => (
+          <div key={+day} className={cn("flex-1 border-l border-border px-2 py-2 text-center", isToday(day) && "bg-primary/5")}>
+            <div className="text-[10px] uppercase text-muted-foreground">{WEEKDAYS[day.getDay()]}</div>
+            <div className={cn("text-sm font-semibold", isToday(day) && "text-primary")}>{day.getDate()}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* all-day row — tasks with a date but no start time */}
+      <div className="flex border-b border-border">
+        <div className="w-14 shrink-0 px-1 py-1 text-right text-[9px] uppercase text-muted-foreground">all-day</div>
+        {columns.map((day) => {
+          const untimed = tasksOn(day).filter((t) => t.startAt == null);
+          return (
+            <DayDropZone key={+day} day={day} tasks={untimed} onDropTask={onDropTask} className="min-h-[2rem] flex-1 space-y-1 border-l border-border p-1">
+              {untimed.map((t) => (
+                <Chip key={t._id} task={t} onClick={() => onChipClick(t._id)} />
               ))}
+            </DayDropZone>
+          );
+        })}
+      </div>
+
+      {/* hour grid */}
+      <div ref={scrollRef} className={cn("flex overflow-y-auto", compact ? "max-h-[44vh]" : "max-h-[58vh]")}>
+        {/* sticky time gutter */}
+        <div className="sticky left-0 z-10 w-14 shrink-0 bg-card">
+          {hours.map((h) => (
+            <div key={h} style={{ height: HOUR_PX }} className="relative border-b border-border/40">
+              <span className="absolute -top-2 right-1.5 text-[10px] text-muted-foreground">{h === 0 ? "" : hourLabel(h)}</span>
             </div>
-          </DayDropZone>
-        );
-      })}
+          ))}
+        </div>
+        {/* day columns */}
+        {columns.map((day) => {
+          const timed = tasksOn(day).filter((t) => t.startAt != null);
+          return (
+            <DayDropZone key={+day} day={day} tasks={timed} onDropTask={onDropTask} className="relative flex-1 border-l border-border">
+              {hours.map((h) => (
+                <div key={h} style={{ height: HOUR_PX }} className="border-b border-border/40" />
+              ))}
+              {timed.map((t) => {
+                const startMin = tsMin(t.startAt!);
+                let endMin = t.dueDate && t.dueDate > t.startAt! ? tsMin(t.dueDate) : startMin + 30;
+                if (endMin <= startMin) endMin = startMin + 30;
+                const top = (startMin / 60) * HOUR_PX;
+                const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX - 2);
+                return (
+                  <button
+                    key={t._id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/task-id", t._id)}
+                    onClick={() => onChipClick(t._id)}
+                    style={{ top, height }}
+                    className={cn(
+                      "absolute inset-x-1 cursor-grab overflow-hidden rounded-md border-l-2 bg-card-2 px-1.5 py-0.5 text-left text-[11px] shadow-sm transition hover:brightness-110 active:cursor-grabbing",
+                      PRIORITY_STYLES[t.priority],
+                      t.status === "done" && "line-through opacity-60",
+                    )}
+                  >
+                    <p className="truncate font-medium">{t.title}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{timeLabel(t.startAt!)}</p>
+                  </button>
+                );
+              })}
+            </DayDropZone>
+          );
+        })}
+      </div>
     </div>
   );
 }
