@@ -25,6 +25,7 @@ export default function TasksPage() {
   const areas = useQuery(api.lifeAreas.list);
   const sections = useQuery(api.sections.list, {});
   const tasks = useQuery(api.tasks.list, {});
+  const projects = useQuery(api.projects.list);
   const createTask = useMutation(api.tasks.create);
 
   const [view, setView] = useState<View>("board");
@@ -35,15 +36,21 @@ export default function TasksPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<"low" | "med" | "high">("med");
+  const [projectId, setProjectId] = useState<string>("");
   const [areaId, setAreaId] = useState<string>("");
   const [due, setDue] = useState<string>("");
 
   const openAdd = () => {
+    setProjectId("");
     setAreaId(areas?.[0]?._id ?? "");
     setTitle("");
     setDue("");
     setAddOpen(true);
   };
+
+  // When a project is chosen the life area is inherited from it.
+  const chosenProject = projects?.find((p) => p._id === projectId);
+  const effectiveAreaId = chosenProject ? chosenProject.lifeAreaId : (areaId as Id<"lifeAreas"> | "");
 
   const areaName = (id: Id<"lifeAreas">) =>
     areas?.find((a) => a._id === id)?.name;
@@ -58,11 +65,12 @@ export default function TasksPage() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !areaId) return;
+    if (!title.trim() || !effectiveAreaId) return;
     void createTask({
       title: title.trim(),
       priority,
-      lifeAreaId: areaId as Id<"lifeAreas">,
+      lifeAreaId: effectiveAreaId as Id<"lifeAreas">,
+      projectId: projectId ? (projectId as Id<"projects">) : undefined,
       dueDate: due ? new Date(due + "T12:00:00").getTime() : undefined,
     });
     setTitle("");
@@ -187,19 +195,39 @@ export default function TasksPage() {
               placeholder="Task title…"
               className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-primary/60"
             />
+            {/* Project first — life area flows down from it */}
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
+            >
+              <option value="">No project — standalone task</option>
+              {projects?.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
             <div className="grid grid-cols-2 gap-3">
-              <select
-                value={areaId}
-                onChange={(e) => setAreaId(e.target.value)}
-                className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
-              >
-                <option value="">Life area…</option>
-                {areas?.map((a) => (
-                  <option key={a._id} value={a._id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+              {chosenProject ? (
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm">
+                  <span className="text-xs text-muted-foreground">Life area</span>
+                  <span className="font-medium">{areaName(chosenProject.lifeAreaId) ?? "—"}</span>
+                </div>
+              ) : (
+                <select
+                  value={areaId}
+                  onChange={(e) => setAreaId(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
+                >
+                  <option value="">Life area…</option>
+                  {areas?.map((a) => (
+                    <option key={a._id} value={a._id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as typeof priority)}
@@ -217,7 +245,7 @@ export default function TasksPage() {
               className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
             />
             <button
-              disabled={!title.trim() || !areaId}
+              disabled={!title.trim() || !effectiveAreaId}
               className="w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               Add task

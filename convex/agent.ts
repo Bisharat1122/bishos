@@ -106,16 +106,16 @@ const TASK_TOOLS = [
     function: {
       name: "createTask",
       description:
-        "Create a new task. Choose a life area from the user's existing areas. Only call when the user clearly wants to add a task.",
+        "Create a new task. Prefer attaching it to a project (the life area is inherited from the project). Only set lifeArea directly for standalone tasks that aren't part of any project. Only call when the user clearly wants to add a task.",
       parameters: {
         type: "object",
         properties: {
           title: { type: "string" },
           description: { type: "string" },
           priority: { type: "string", enum: [...PRIORITIES], description: "low, med, or high" },
-          lifeArea: { type: "string", description: "Name of one of the user's existing life areas" },
+          project: { type: "string", description: "Title of an existing project to attach to — its life area is inherited (preferred)" },
+          lifeArea: { type: "string", description: "Life area name — only for standalone tasks with no project" },
           dueDate: { type: "string", description: "Due date as ISO date YYYY-MM-DD (optional)" },
-          project: { type: "string", description: "Title of an existing project to attach to (optional)" },
         },
         required: ["title"],
       },
@@ -751,13 +751,18 @@ async function execAction(
       PRIORITIES.includes(x as Priority) ? (x as Priority) : "med";
 
     if (tool === "createTask") {
-      const area = matchArea(str(args.lifeArea));
-      if (!area) throw new Error("No life area exists yet — create one first.");
       const projects = await ctx.db
         .query("projects")
         .withIndex("by_user", (q: { eq: (a: string, b: unknown) => unknown }) => q.eq("userId", userId))
         .collect();
-      const project = byTitle(projects, str(args.project));
+      const project = byTitle(projects, str(args.project)) as
+        | { _id: Id<"projects">; lifeAreaId: Id<"lifeAreas"> }
+        | undefined;
+      // Life area is inherited from the project when one is given, else picked.
+      const area = project
+        ? areas.find((a: { _id: Id<"lifeAreas"> }) => a._id === project.lifeAreaId)
+        : matchArea(str(args.lifeArea));
+      if (!area) throw new Error("No life area exists yet — create one first.");
       await ctx.db.insert("tasks", {
         userId,
         title: str(args.title) ?? "Untitled task",
@@ -767,8 +772,9 @@ async function execAction(
         lifeAreaId: area._id,
         projectId: project?._id,
         status: "not_started",
+        order: Date.now(),
       });
-      return `Created task in ${area.name}`;
+      return `Created task${project ? ` in ${area.name} (project)` : ` in ${area.name}`}`;
     }
 
     const task = byTitle(tasks, str(args.taskTitle));
