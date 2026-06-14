@@ -41,6 +41,9 @@ export default defineSchema({
     // Optional scheduled start (date + time). With dueDate as the end, the task
     // shows on the Schedule timeline and Calendar at that exact window.
     startAt: v.optional(v.number()),
+    // Deprecated: superseded by dueDate (end = due). Kept optional so existing
+    // production docs that still carry it validate; no longer written/read.
+    endAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),
