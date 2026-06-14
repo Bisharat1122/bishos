@@ -15,6 +15,11 @@ const COLUMNS: { key: Status; label: string; accent: string }[] = [
   { key: "done", label: "Done", accent: "bg-primary" },
 ];
 
+/** Effective sort key — manual order if set, else creation time. Higher = top. */
+const eff = (t: Doc<"tasks">) => t.order ?? t._creationTime;
+
+type DropAt = { col: Status; taskId: Id<"tasks"> | null; before: boolean };
+
 export function TaskBoard({
   tasks,
   areaName,
@@ -26,42 +31,71 @@ export function TaskBoard({
   onSelect?: (id: Id<"tasks">) => void;
   compact?: boolean;
 }) {
-  const setStatus = useMutation(api.tasks.setStatus).withOptimisticUpdate((store, { id, status }) => {
+  const setOrder = useMutation(api.tasks.setOrder).withOptimisticUpdate((store, { id, order, status }) => {
     const cur = store.getQuery(api.tasks.list, {});
     if (!cur) return;
-    store.setQuery(api.tasks.list, {}, cur.map((t) => (t._id === id ? { ...t, status } : t)));
+    store.setQuery(
+      api.tasks.list,
+      {},
+      cur.map((t) => (t._id === id ? { ...t, order, ...(status ? { status } : {}) } : t)),
+    );
   });
   const removeTask = useMutation(api.tasks.remove);
-  const [dragOver, setDragOver] = useState<Status | null>(null);
 
-  function onDrop(status: Status, e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(null);
-    const id = e.dataTransfer.getData("text/task-id") as Id<"tasks">;
-    if (id) void setStatus({ id, status });
+  const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null);
+  const [dropAt, setDropAt] = useState<DropAt | null>(null);
+
+  const colTasksOf = (status: Status) =>
+    tasks.filter((t) => t.status === status).sort((a, b) => eff(b) - eff(a));
+
+  /** Order value that places the dragged task at the indicated slot. */
+  function computeOrder(status: Status, targetId: Id<"tasks"> | null, before: boolean): number {
+    const list = colTasksOf(status).filter((t) => t._id !== draggingId);
+    if (!targetId) {
+      if (list.length === 0) return Date.now();
+      return eff(list[list.length - 1]) - 1; // bottom of column
+    }
+    const idx = list.findIndex((t) => t._id === targetId);
+    if (idx === -1) return Date.now();
+    const target = list[idx];
+    if (before) {
+      const above = list[idx - 1];
+      return above ? (eff(above) + eff(target)) / 2 : eff(target) + 1;
+    }
+    const below = list[idx + 1];
+    return below ? (eff(target) + eff(below)) / 2 : eff(target) - 1;
+  }
+
+  function handleDrop(col: Status) {
+    if (!draggingId) return;
+    const at = dropAt && dropAt.col === col ? dropAt : { col, taskId: null, before: false };
+    const order = computeOrder(col, at.taskId, at.before);
+    const dragged = tasks.find((t) => t._id === draggingId);
+    const status = dragged && dragged.status !== col ? col : undefined;
+    void setOrder({ id: draggingId, order, status });
+    setDraggingId(null);
+    setDropAt(null);
   }
 
   return (
-    <div
-      className={cn(
-        "grid gap-4",
-        compact ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 md:grid-cols-3",
-      )}
-    >
+    <div className={cn("grid gap-4", compact ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 md:grid-cols-3")}>
       {COLUMNS.map((col) => {
-        const colTasks = tasks.filter((t) => t.status === col.key);
+        const colTasks = colTasksOf(col.key);
+        const active = draggingId && dropAt?.col === col.key;
         return (
           <div
             key={col.key}
             onDragOver={(e) => {
               e.preventDefault();
-              setDragOver(col.key);
+              setDropAt({ col: col.key, taskId: null, before: false });
             }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={(e) => onDrop(col.key, e)}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDrop(col.key);
+            }}
             className={cn(
               "flex flex-col rounded-2xl border border-border bg-card/50 p-3 transition-colors",
-              dragOver === col.key && "border-primary/60 bg-primary/5",
+              active && "border-primary/60 bg-primary/5",
             )}
           >
             <div className="mb-3 flex items-center gap-2 px-1">
@@ -71,19 +105,56 @@ export function TaskBoard({
                 {colTasks.length}
               </span>
             </div>
-            <div className="flex flex-col gap-2">
-              {colTasks.map((t) => (
-                <TaskCard
-                  key={t._id}
-                  task={t}
-                  areaName={areaName(t.lifeAreaId)}
-                  onDelete={() => void removeTask({ id: t._id })}
-                  onClick={onSelect ? () => onSelect(t._id) : undefined}
-                  compact={compact}
-                />
-              ))}
+
+            <div className="flex min-h-[3rem] flex-col gap-2">
+              {colTasks.map((t) => {
+                const showBefore = dropAt?.col === col.key && dropAt.taskId === t._id && dropAt.before;
+                const showAfter = dropAt?.col === col.key && dropAt.taskId === t._id && !dropAt.before;
+                return (
+                  <div
+                    key={t._id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggingId(t._id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropAt(null);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setDropAt({ col: col.key, taskId: t._id, before: e.clientY < r.top + r.height / 2 });
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDrop(col.key);
+                    }}
+                    className={cn("cursor-grab active:cursor-grabbing", draggingId === t._id && "opacity-40")}
+                  >
+                    {showBefore && <DropLine />}
+                    <TaskCard
+                      task={t}
+                      areaName={areaName(t.lifeAreaId)}
+                      onDelete={() => void removeTask({ id: t._id })}
+                      onClick={onSelect ? () => onSelect(t._id) : undefined}
+                      compact={compact}
+                    />
+                    {showAfter && <DropLine />}
+                  </div>
+                );
+              })}
+
               {colTasks.length === 0 && (
-                <div className="rounded-xl border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    "rounded-xl border border-dashed py-6 text-center text-xs",
+                    active ? "border-primary/60 text-primary" : "border-border text-muted-foreground",
+                  )}
+                >
                   Drop tasks here
                 </div>
               )}
@@ -93,4 +164,8 @@ export function TaskBoard({
       })}
     </div>
   );
+}
+
+function DropLine() {
+  return <div className="my-1 h-0.5 rounded-full bg-primary" />;
 }

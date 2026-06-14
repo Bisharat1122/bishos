@@ -31,14 +31,10 @@ export function TaskCard({
 }) {
   return (
     <div
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData("text/task-id", task._id);
-        e.dataTransfer.effectAllowed = "move";
-      }}
       onClick={onClick}
       className={cn(
-        "group cursor-grab rounded-xl border border-l-4 border-border bg-card-2 active:cursor-grabbing",
+        "group rounded-xl border border-l-4 border-border bg-card-2",
+        onClick && "cursor-pointer",
         PRIORITY_STYLES[task.priority],
         compact ? "px-2 py-1.5" : "p-3",
       )}

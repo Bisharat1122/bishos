@@ -43,6 +43,9 @@ export default defineSchema({
     projectId: v.optional(v.id("projects")),
     linkedNoteIds: v.optional(v.array(v.id("notes"))),
     tags: v.optional(v.array(v.string())),
+    // Manual ordering within a Kanban column (higher = nearer the top).
+    // New tasks get a large value so they land on top; drag-reorder rewrites it.
+    order: v.optional(v.number()),
     attachments: v.optional(
       v.array(
         v.object({

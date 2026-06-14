@@ -59,7 +59,8 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
-    return ctx.db.insert("tasks", { ...args, userId, status: "not_started" });
+    // order = now → newest task sorts to the top of the "Not started" column
+    return ctx.db.insert("tasks", { ...args, userId, status: "not_started", order: Date.now() });
   },
 });
 
@@ -99,6 +100,25 @@ export const setStatus = mutation({
       status: args.status,
       completedAt: args.status === "done" ? Date.now() : undefined,
     });
+  },
+});
+
+/** Drag-and-drop: set a task's manual order (and optionally move it to another
+ * column/status in the same gesture). */
+export const setOrder = mutation({
+  args: {
+    id: v.id("tasks"),
+    order: v.number(),
+    status: v.optional(statusValidator),
+  },
+  handler: async (ctx, { id, order, status }) => {
+    await requireUser(ctx);
+    const patch: Record<string, unknown> = { order };
+    if (status !== undefined) {
+      patch.status = status;
+      patch.completedAt = status === "done" ? Date.now() : undefined;
+    }
+    await ctx.db.patch(id, patch);
   },
 });
 
