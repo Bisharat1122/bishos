@@ -23,11 +23,15 @@ type DropAt = { col: Status; taskId: Id<"tasks"> | null; before: boolean };
 export function TaskBoard({
   tasks,
   areaName,
+  projectName,
+  focusByTask,
   onSelect,
   compact = false,
 }: {
   tasks: Doc<"tasks">[];
   areaName: (id: Id<"lifeAreas">) => string | undefined;
+  projectName?: (id: Id<"projects">) => string | undefined;
+  focusByTask?: Map<string, number>;
   onSelect?: (id: Id<"tasks">) => void;
   compact?: boolean;
 }) {
@@ -139,6 +143,8 @@ export function TaskBoard({
                     <TaskCard
                       task={t}
                       areaName={areaName(t.lifeAreaId)}
+                      projectName={t.projectId ? projectName?.(t.projectId) : undefined}
+                      focusSeconds={focusByTask?.get(t._id)}
                       onDelete={() => void removeTask({ id: t._id })}
                       onClick={onSelect ? () => onSelect(t._id) : undefined}
                       compact={compact}

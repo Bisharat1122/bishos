@@ -52,8 +52,16 @@ export default function TasksPage() {
   const chosenProject = projects?.find((p) => p._id === projectId);
   const effectiveAreaId = chosenProject ? chosenProject.lifeAreaId : (areaId as Id<"lifeAreas"> | "");
 
+  const focusTotals = useQuery(api.focus.taskTotals);
+  const focusByTask = useMemo(
+    () => new Map((focusTotals?.tasks ?? []).map((t) => [t.id, t.seconds] as const)),
+    [focusTotals],
+  );
+
   const areaName = (id: Id<"lifeAreas">) =>
     areas?.find((a) => a._id === id)?.name;
+  const projectName = (id: Id<"projects">) =>
+    projects?.find((p) => p._id === id)?.title;
   const sectionName = (id?: Id<"sections">) =>
     id ? sections?.find((s) => s._id === id)?.name : undefined;
 
@@ -133,7 +141,13 @@ export default function TasksPage() {
         {/* Views */}
         <div className="flex-1 overflow-y-auto">
           {view === "board" && (
-            <TaskBoard tasks={filtered} areaName={areaName} onSelect={setSelected} />
+            <TaskBoard
+              tasks={filtered}
+              areaName={areaName}
+              projectName={projectName}
+              focusByTask={focusByTask}
+              onSelect={setSelected}
+            />
           )}
           {view === "list" && (
             <TaskList
@@ -161,6 +175,8 @@ export default function TasksPage() {
                 <TaskBoard
                   tasks={filtered}
                   areaName={areaName}
+                  projectName={projectName}
+                  focusByTask={focusByTask}
                   onSelect={setSelected}
                   compact
                 />
