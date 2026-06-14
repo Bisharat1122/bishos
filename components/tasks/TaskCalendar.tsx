@@ -45,13 +45,27 @@ export function TaskCalendar({
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const updateTask = useMutation(api.tasks.update);
 
+  // A task lands on the calendar by its scheduled start, else its due date.
+  const calDate = (t: Doc<"tasks">) => t.startAt ?? t.dueDate;
   const tasksOn = (day: Date) =>
-    tasks.filter((t) => t.dueDate && isSameDay(t.dueDate, day));
+    tasks
+      .filter((t) => calDate(t) != null && isSameDay(calDate(t)!, day))
+      .sort((a, b) => (calDate(a)! - calDate(b)!));
 
   function reschedule(taskId: Id<"tasks">, day: Date) {
-    const noon = new Date(day);
-    noon.setHours(12, 0, 0, 0);
-    void updateTask({ id: taskId, dueDate: noon.getTime() });
+    const t = tasks.find((x) => x._id === taskId);
+    if (t?.startAt) {
+      // preserve the time of day; shift end by the same delta
+      const src = new Date(t.startAt);
+      const dst = new Date(day);
+      dst.setHours(src.getHours(), src.getMinutes(), 0, 0);
+      const delta = dst.getTime() - t.startAt;
+      void updateTask({ id: taskId, startAt: dst.getTime(), endAt: t.endAt ? t.endAt + delta : undefined });
+    } else {
+      const noon = new Date(day);
+      noon.setHours(12, 0, 0, 0);
+      void updateTask({ id: taskId, dueDate: noon.getTime() });
+    }
   }
 
   function navigate(dir: 1 | -1) {
@@ -138,6 +152,9 @@ export function TaskCalendar({
   );
 }
 
+const timeLabel = (ts: number) =>
+  new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
 function Chip({
   task,
   onClick,
@@ -145,18 +162,25 @@ function Chip({
   task: Doc<"tasks">;
   onClick: () => void;
 }) {
+  // Show the scheduled time range (start–end) when set, else the start time.
+  const time = task.startAt
+    ? task.endAt
+      ? `${timeLabel(task.startAt)}–${timeLabel(task.endAt)}`
+      : timeLabel(task.startAt)
+    : null;
   return (
     <div
       draggable
       onDragStart={(e) => e.dataTransfer.setData("text/task-id", task._id)}
       onClick={onClick}
-      title={`${task.title} — click to advance status`}
+      title={`${time ? time + " · " : ""}${task.title}`}
       className={cn(
         "cursor-grab truncate rounded-md border-l-2 bg-card-2 px-1.5 py-1 text-[11px] active:cursor-grabbing",
         PRIORITY_STYLES[task.priority],
         task.status === "done" && "text-muted-foreground line-through",
       )}
     >
+      {time && <span className="mr-1 font-semibold text-primary">{time}</span>}
       {task.title}
     </div>
   );

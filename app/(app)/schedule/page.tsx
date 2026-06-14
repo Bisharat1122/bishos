@@ -1,9 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Doc } from "@/convex/_generated/dataModel";
+
+/** minutes-from-midnight (local) for a timestamp */
+const tsMin = (ts: number) => {
+  const d = new Date(ts);
+  return d.getHours() * 60 + d.getMinutes();
+};
 import { ChevronLeft, ChevronRight, Plus, CalendarDays, Clock, Target, Gauge } from "lucide-react";
 import { Topbar, StatCard } from "@/components/ui";
 import {
@@ -24,6 +31,7 @@ const minToLabel = (m: number) => {
 };
 
 export default function SchedulePage() {
+  const router = useRouter();
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [modal, setModal] = useState<
@@ -63,6 +71,7 @@ export default function SchedulePage() {
 
   // resolve link names/colors
   const areas = useQuery(api.lifeAreas.list);
+  const tasks = useQuery(api.tasks.list, {});
   const byDate = useMemo(() => {
     const m = new Map<string, Doc<"scheduleBlocks">[]>();
     for (const b of blocks ?? []) {
@@ -72,6 +81,19 @@ export default function SchedulePage() {
     }
     return m;
   }, [blocks]);
+
+  // Tasks with a scheduled start time appear on the timeline alongside blocks.
+  const taskByDate = useMemo(() => {
+    const m = new Map<string, Doc<"tasks">[]>();
+    for (const t of tasks ?? []) {
+      if (t.startAt == null) continue;
+      const key = ymdLocal(new Date(t.startAt));
+      const arr = m.get(key) ?? [];
+      arr.push(t);
+      m.set(key, arr);
+    }
+    return m;
+  }, [tasks]);
 
   const areaColor = (id?: string) => areas?.find((a) => a._id === id)?.color;
 
@@ -237,6 +259,28 @@ export default function SchedulePage() {
                     </button>
                   );
                 })}
+                {/* scheduled tasks (start/end time) — read-only, dashed */}
+                {(taskByDate.get(ds) ?? []).map((t) => {
+                  const startMin = tsMin(t.startAt!);
+                  let endMin = t.endAt ? tsMin(t.endAt) : startMin + 30;
+                  if (endMin <= startMin) endMin = startMin + 30;
+                  const top = (startMin / 60) * HOUR_PX;
+                  const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX - 2);
+                  return (
+                    <button
+                      key={t._id}
+                      onClick={(e) => { e.stopPropagation(); router.push("/tasks"); }}
+                      style={{ top, height }}
+                      className={cn(
+                        "absolute inset-x-1 overflow-hidden rounded-md border border-dashed border-primary/60 bg-primary/10 px-1.5 py-0.5 text-left text-[11px] transition hover:brightness-110",
+                        t.status === "done" && "line-through opacity-60",
+                      )}
+                    >
+                      <p className="truncate font-medium">{t.title}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">{minToLabel(startMin)} · task</p>
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
@@ -298,6 +342,15 @@ export default function SchedulePage() {
                       )}
                     >
                       {minToLabel(b.startMin)} {b.title}
+                    </button>
+                  ))}
+                  {(taskByDate.get(ds) ?? []).slice(0, 2).map((t) => (
+                    <button
+                      key={t._id}
+                      onClick={() => router.push("/tasks")}
+                      className="block w-full truncate rounded border border-dashed border-primary/40 bg-primary/5 px-1 py-0.5 text-left text-[10px]"
+                    >
+                      {minToLabel(tsMin(t.startAt!))} {t.title}
                     </button>
                   ))}
                   {items.length > 3 && (

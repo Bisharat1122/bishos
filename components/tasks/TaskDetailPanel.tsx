@@ -97,6 +97,12 @@ export function TaskDetailPanel({
   const dueValue = task.dueDate
     ? new Date(task.dueDate).toISOString().slice(0, 10)
     : "";
+  const toLocalInput = (ts?: number) => {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -247,6 +253,34 @@ export function TaskDetailPanel({
           }
           className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-sm outline-none [color-scheme:dark]"
         />
+      </Field>
+
+      {/* Scheduled window — shows on Schedule & Calendar at this exact time */}
+      <Field label="Scheduled time">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-muted-foreground">Start</span>
+            <input
+              type="datetime-local"
+              value={toLocalInput(task.startAt)}
+              onChange={(e) =>
+                void update({ id, startAt: e.target.value ? new Date(e.target.value).getTime() : null })
+              }
+              className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-muted-foreground">End</span>
+            <input
+              type="datetime-local"
+              value={toLocalInput(task.endAt)}
+              onChange={(e) =>
+                void update({ id, endAt: e.target.value ? new Date(e.target.value).getTime() : null })
+              }
+              className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
+            />
+          </label>
+        </div>
       </Field>
 
       {/* Tags */}

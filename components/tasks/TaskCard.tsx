@@ -83,55 +83,49 @@ export function TaskCard({
             {task.title}
           </p>
 
-          {/* compact: just a tiny deadline pill if present */}
-          {compact && due && (
-            <span className={cn("mt-1 inline-flex items-center gap-0.5 text-[10px]", due.urgent ? "text-warning" : "text-muted-foreground")}>
-              <CalendarClock className="h-3 w-3" /> {due.label}
-            </span>
-          )}
-
-          {!compact && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+          {/* metrics — shown in both normal and compact (split) cards */}
+          <div className={cn("flex flex-wrap items-center gap-1.5 text-[10px]", compact ? "mt-1" : "mt-2")}>
+            {!compact && (
               <span className={cn("font-semibold uppercase tracking-wide", PRIORITY_TEXT[task.priority])}>
                 {task.priority}
               </span>
+            )}
 
-              {due && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-medium",
-                    due.urgent ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  <CalendarClock className="h-3 w-3" /> {due.label}
-                </span>
-              )}
+            {due && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-medium",
+                  due.urgent ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground",
+                )}
+              >
+                <CalendarClock className="h-3 w-3" /> {due.label}
+              </span>
+            )}
 
-              {projectName ? (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-sprint/15 px-1.5 py-0.5 text-sprint">
-                  <FolderKanban className="h-3 w-3" /> <span className="max-w-[8rem] truncate">{projectName}</span>
+            {projectName ? (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-sprint/15 px-1.5 py-0.5 text-sprint">
+                <FolderKanban className="h-3 w-3" /> <span className="max-w-[7rem] truncate">{projectName}</span>
+              </span>
+            ) : (
+              areaName && (
+                <span className="max-w-[7rem] truncate rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
+                  {areaName}
                 </span>
-              ) : (
-                areaName && (
-                  <span className="max-w-[8rem] truncate rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
-                    {areaName}
-                  </span>
-                )
-              )}
+              )
+            )}
 
-              {focusH && (
-                <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                  <Clock className="h-3 w-3" /> {focusH}h
-                </span>
-              )}
+            {focusH && (
+              <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                <Clock className="h-3 w-3" /> {focusH}h
+              </span>
+            )}
 
-              {attachments > 0 && (
-                <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                  <Paperclip className="h-3 w-3" /> {attachments}
-                </span>
-              )}
-            </div>
-          )}
+            {attachments > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                <Paperclip className="h-3 w-3" /> {attachments}
+              </span>
+            )}
+          </div>
 
           {/* tags */}
           {!compact && tags.length > 0 && (
@@ -145,22 +139,20 @@ export function TaskCard({
           )}
         </div>
 
-        {!compact && (
-          <div className="flex shrink-0 items-center gap-1">
-            <TaskTimerButton task={task} compact />
-            {onDelete && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          <TaskTimerButton task={task} compact />
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
