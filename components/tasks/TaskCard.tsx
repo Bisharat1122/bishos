@@ -2,6 +2,7 @@
 
 import { Doc } from "@/convex/_generated/dataModel";
 import { Trash2, GripVertical, CalendarClock, Clock, FolderKanban, Paperclip } from "lucide-react";
+import { TaskTimerButton } from "./TaskTimerButton";
 import { cn } from "@/lib/utils";
 
 export const PRIORITY_STYLES: Record<string, string> = {
@@ -144,16 +145,21 @@ export function TaskCard({
           )}
         </div>
 
-        {!compact && onDelete && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+        {!compact && (
+          <div className="flex shrink-0 items-center gap-1">
+            <TaskTimerButton task={task} compact />
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

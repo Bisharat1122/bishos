@@ -20,6 +20,7 @@ import {
 import { SlashEditor } from "@/components/editor/SlashEditor";
 import { MarkdownLite } from "./MarkdownLite";
 import { AddToMomentum } from "@/components/momentum/AddToMomentum";
+import { TaskTimerButton } from "./TaskTimerButton";
 import { cn } from "@/lib/utils";
 
 type Status = "not_started" | "in_progress" | "done";
@@ -147,7 +148,8 @@ export function TaskDetailPanel({
         className="w-full bg-transparent text-lg font-bold outline-none"
       />
 
-      <div className="mt-1">
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <TaskTimerButton task={task} />
         <AddToMomentum type="task" itemId={id} title={task.title} compact />
       </div>
 

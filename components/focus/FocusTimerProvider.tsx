@@ -40,6 +40,7 @@ type Ctx = {
   elapsed: number; left: number; total: number; display: number; active: boolean;
   toggle: () => void;
   stopAndLog: () => void;
+  startFocus: (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string }) => void;
   switchType: (t: TimerType) => void;
   setMode: (m: Mode) => void;
   setWorkMin: (n: number) => void;
@@ -155,6 +156,30 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     });
   }, [logFocus]);
 
+  const startFocus = useCallback(
+    (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string }) => {
+      setS((p) => {
+        // log any in-progress focus time under the PREVIOUS attribution first
+        const seg = p.running && p.segmentStart ? (Date.now() - p.segmentStart) / 1000 : 0;
+        const acc = p.accumulated + seg;
+        if (p.type === "stopwatch" || p.mode === "focus") logFocus(acc);
+        return {
+          ...p,
+          type: opts.type,
+          mode: "focus",
+          accumulated: 0,
+          segmentStart: Date.now(),
+          running: true,
+          taskId: opts.taskId ?? "",
+          projectId: opts.projectId ?? "",
+          areaId: opts.areaId ?? "",
+          taskTitle: opts.taskTitle ?? "",
+        };
+      });
+    },
+    [logFocus],
+  );
+
   const switchType = useCallback((t: TimerType) =>
     setS((p) => ({ ...p, type: t, running: false, mode: "focus", accumulated: 0, segmentStart: null })), []);
   const setModeFn = useCallback((m: Mode) =>
@@ -169,7 +194,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     type: s.type, mode: s.mode, workMin: s.workMin, breakMin: s.breakMin, running: s.running,
     taskId: s.taskId, projectId: s.projectId, areaId: s.areaId, taskTitle: s.taskTitle,
     elapsed, left, total, display, active,
-    toggle, stopAndLog, switchType, setMode: setModeFn, setWorkMin, setBreakMin, skipBreak, attribute,
+    toggle, stopAndLog, startFocus, switchType, setMode: setModeFn, setWorkMin, setBreakMin, skipBreak, attribute,
   };
 
   return <FocusTimerContext.Provider value={value}>{children}</FocusTimerContext.Provider>;
