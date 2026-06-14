@@ -5,6 +5,7 @@ import { Maximize2, Minimize2, X } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
 import { ProfileButton } from "./ProfileButton";
+import { FocusTimerPill } from "./focus/FocusTimerPill";
 import { cn } from "@/lib/utils";
 
 export function Card({
@@ -47,6 +48,7 @@ export function Topbar({ action }: { title?: string; action?: ReactNode }) {
       {/* Right-aligned actions */}
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
         {action}
+        <FocusTimerPill />
         <button
           onClick={toggleFullscreen}
           title={fs ? "Exit full screen" : "Full screen"}

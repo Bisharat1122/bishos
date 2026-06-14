@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, Sparkles } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { ModuleDockMount } from "@/components/ai/ModuleDockMount";
+import { FocusTimerProvider } from "@/components/focus/FocusTimerProvider";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -31,6 +32,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
+    <FocusTimerProvider>
     <div className="flex h-screen overflow-hidden">
       {/* top navigation progress bar */}
       {progress > 0 && (
@@ -88,5 +90,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Floating per-module agentic assistant (renders only on module routes) */}
       <ModuleDockMount />
     </div>
+    </FocusTimerProvider>
   );
 }

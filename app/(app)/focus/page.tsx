@@ -7,10 +7,11 @@ import { Id } from "@/convex/_generated/dataModel";
 import { Play, Pause, RotateCcw, SkipForward, Plus, Trash2, Clock, Timer } from "lucide-react";
 import { Card, Topbar } from "@/components/ui";
 import { BarChart } from "@/components/Chart";
+import { useFocusTimer } from "@/components/focus/FocusTimerProvider";
 import { cn } from "@/lib/utils";
 
 const fmt = (s: number) =>
-  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s) % 60).padStart(2, "0")}`;
 const hrs = (s: number) => (s / 3600).toFixed(1);
 const PRANK = { high: 0, med: 1, low: 2 } as const;
 
@@ -22,21 +23,23 @@ export default function FocusPage() {
   const weekRange = useQuery(api.focus.rangeAnalytics, { range: "week" });
   const totals = useQuery(api.focus.taskTotals);
   const sessions = useQuery(api.focus.list);
-  const log = useMutation(api.focus.log);
   const logManual = useMutation(api.focus.logManual);
   const removeSession = useMutation(api.focus.remove);
 
-  const [type, setType] = useState<"pomodoro" | "stopwatch">("pomodoro");
-  const [workMin, setWorkMin] = useState(25);
-  const [breakMin, setBreakMin] = useState(5);
-  const [mode, setMode] = useState<"focus" | "break">("focus");
-  const [left, setLeft] = useState(25 * 60);
-  const [elapsed, setElapsed] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [taskId, setTaskId] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [areaId, setAreaId] = useState("");
-  const tick = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The running timer lives in a global provider so it persists across pages
+  // and is mirrored in the Topbar.
+  const timer = useFocusTimer();
+  const { type, mode, workMin, breakMin, running, taskId, projectId, areaId } = timer;
+
+  function pickTask(id: string) {
+    const t = tasks?.find((x) => x._id === id);
+    timer.attribute({
+      taskId: id,
+      areaId: t?.lifeAreaId ?? "",
+      projectId: t?.projectId ?? "",
+      taskTitle: t?.title ?? "",
+    });
+  }
 
   // preselect a task when arriving from a task's "Focus on this" link
   const preselected = useRef(false);
@@ -50,76 +53,13 @@ export default function FocusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks]);
 
-  function logFocus(seconds: number) {
-    if (seconds < 30) return;
-    const end = Date.now();
-    void log({
-      startTime: end - seconds * 1000,
-      endTime: end,
-      duration: seconds,
-      taskId: taskId ? (taskId as Id<"tasks">) : undefined,
-      projectId: projectId ? (projectId as Id<"projects">) : undefined,
-      lifeAreaId: areaId ? (areaId as Id<"lifeAreas">) : undefined,
-    });
-  }
-
-  // counter loop — pause never resets (it just stops the interval)
-  useEffect(() => {
-    if (!running) return;
-    tick.current = setInterval(() => {
-      if (type === "stopwatch") setElapsed((e) => e + 1);
-      else setLeft((l) => (l > 0 ? l - 1 : 0));
-    }, 1000);
-    return () => {
-      if (tick.current) clearInterval(tick.current);
-    };
-  }, [running, type]);
-
-  // pomodoro block transitions when the countdown hits zero
-  useEffect(() => {
-    if (type !== "pomodoro" || !running || left !== 0) return;
-    if (mode === "focus") {
-      logFocus(workMin * 60);
-      setMode("break");
-      setLeft(breakMin * 60);
-    } else {
-      setMode("focus");
-      setRunning(false);
-      setLeft(workMin * 60);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [left, running, type, mode]);
-
-  function switchType(t: "pomodoro" | "stopwatch") {
-    setType(t);
-    setRunning(false);
-    setMode("focus");
-    setLeft(workMin * 60);
-    setElapsed(0);
-  }
-
-  function stopAndLog() {
-    if (type === "stopwatch") logFocus(elapsed);
-    else if (mode === "focus") logFocus(workMin * 60 - left);
-    setRunning(false);
-    setMode("focus");
-    setLeft(workMin * 60);
-    setElapsed(0);
-  }
-
-  function pickTask(id: string) {
-    setTaskId(id);
-    const t = tasks?.find((x) => x._id === id);
-    if (t) {
-      setAreaId(t.lifeAreaId);
-      setProjectId(t.projectId ?? "");
-    }
-  }
-
-  const total = mode === "focus" ? workMin * 60 : breakMin * 60;
-  const display = type === "stopwatch" ? elapsed : left;
+  const display = timer.display;
   const pct =
-    type === "stopwatch" ? (elapsed % 60) / 60 * 100 : total > 0 ? ((total - left) / total) * 100 : 0;
+    type === "stopwatch"
+      ? ((timer.elapsed % 60) / 60) * 100
+      : timer.total > 0
+        ? ((timer.total - timer.left) / timer.total) * 100
+        : 0;
   const openTasks = (tasks ?? [])
     .filter((t) => t.status !== "done")
     .sort((a, b) => PRANK[a.priority] - PRANK[b.priority]);
@@ -144,7 +84,7 @@ export default function FocusPage() {
               ] as const).map((t) => (
                 <button
                   key={t.k}
-                  onClick={() => switchType(t.k)}
+                  onClick={() => timer.switchType(t.k)}
                   className={cn(
                     "flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-medium transition",
                     type === t.k ? "bg-primary text-primary-foreground" : "text-muted-foreground",
@@ -161,11 +101,7 @@ export default function FocusPage() {
                 {(["focus", "break"] as const).map((m) => (
                   <button
                     key={m}
-                    onClick={() => {
-                      setMode(m);
-                      setRunning(false);
-                      setLeft((m === "focus" ? workMin : breakMin) * 60);
-                    }}
+                    onClick={() => timer.setMode(m)}
                     className={cn(
                       "rounded-full px-4 py-1 text-xs font-medium capitalize",
                       mode === m ? "bg-muted text-foreground" : "text-muted-foreground",
@@ -202,14 +138,14 @@ export default function FocusPage() {
 
             <div className="mt-4 flex justify-center gap-2">
               <button
-                onClick={() => setRunning((r) => !r)}
+                onClick={timer.toggle}
                 className="flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground"
               >
                 {running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {running ? "Pause" : "Start"}
               </button>
               <button
-                onClick={stopAndLog}
+                onClick={timer.stopAndLog}
                 title="Stop & log focused time"
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-border hover:bg-muted"
               >
@@ -217,11 +153,7 @@ export default function FocusPage() {
               </button>
               {type === "pomodoro" && mode === "break" && (
                 <button
-                  onClick={() => {
-                    setMode("focus");
-                    setRunning(false);
-                    setLeft(workMin * 60);
-                  }}
+                  onClick={timer.skipBreak}
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-border hover:bg-muted"
                 >
                   <SkipForward className="h-4 w-4" />
@@ -238,11 +170,7 @@ export default function FocusPage() {
                     type="number"
                     min={1}
                     value={workMin}
-                    onChange={(e) => {
-                      const v = Math.max(1, Number(e.target.value));
-                      setWorkMin(v);
-                      if (!running && mode === "focus") setLeft(v * 60);
-                    }}
+                    onChange={(e) => timer.setWorkMin(Math.max(1, Number(e.target.value)))}
                     className="w-16 rounded-lg border border-border bg-muted/30 px-2 py-1 outline-none"
                   />
                   <span className="w-12 text-muted-foreground">Break</span>
@@ -250,11 +178,7 @@ export default function FocusPage() {
                     type="number"
                     min={1}
                     value={breakMin}
-                    onChange={(e) => {
-                      const v = Math.max(1, Number(e.target.value));
-                      setBreakMin(v);
-                      if (!running && mode === "break") setLeft(v * 60);
-                    }}
+                    onChange={(e) => timer.setBreakMin(Math.max(1, Number(e.target.value)))}
                     className="w-16 rounded-lg border border-border bg-muted/30 px-2 py-1 outline-none"
                   />
                 </div>
@@ -274,9 +198,8 @@ export default function FocusPage() {
               <select
                 value={projectId}
                 onChange={(e) => {
-                  setProjectId(e.target.value);
                   const pa = projects?.find((p) => p._id === e.target.value)?.lifeAreaId;
-                  if (pa) setAreaId(pa);
+                  timer.attribute({ projectId: e.target.value, areaId: pa ?? areaId });
                 }}
                 className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none"
               >
@@ -289,7 +212,7 @@ export default function FocusPage() {
               </select>
               <select
                 value={areaId}
-                onChange={(e) => setAreaId(e.target.value)}
+                onChange={(e) => timer.attribute({ areaId: e.target.value })}
                 className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none"
               >
                 <option value="">Life area…</option>
