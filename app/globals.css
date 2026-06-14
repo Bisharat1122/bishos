@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * bishOS design system — inspired by the reference dashboards:
+ * near-black surfaces, vibrant lime/emerald green accent, orange secondary
+ * (for charts), soft rounded cards, unique geometric font (Sora).
+ */
+:root {
+  --radius: 1rem;
+
+  /* Light mode kept minimal — the app is dark-first. */
+  --background: 150 20% 98%;
+  --foreground: 160 30% 10%;
+  --card: 0 0% 100%;
+  --muted: 150 16% 94%;
+  --muted-foreground: 155 10% 40%;
+  --primary: 142 70% 45%;
+  --primary-foreground: 160 60% 6%;
+  --accent: 84 78% 55%;
+  --warning: 28 95% 55%;
+  --sprint: 265 80% 60%;
+  --border: 150 14% 88%;
+}
+
+.dark {
+  /* near-black green-tinted base */
+  --background: 160 18% 5%;
+  --foreground: 150 20% 96%;
+  --card: 158 16% 9%;
+  --card-2: 158 16% 12%;
+  --muted: 158 14% 14%;
+  --muted-foreground: 150 10% 62%;
+  /* vibrant lime/emerald accent */
+  --primary: 88 80% 58%;
+  --primary-foreground: 160 40% 8%;
+  --accent: 150 70% 48%;
+  --warning: 28 95% 58%;
+  --sprint: 265 85% 66%;
+  --border: 158 14% 16%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "ss01" 1, "cv01" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle ambient green glow used behind hero areas */
+.glow-grid {
+  background-image:
+    radial-gradient(60% 50% at 80% 0%, hsl(150 70% 30% / 0.18), transparent 70%),
+    linear-gradient(to bottom, hsl(158 16% 7%), hsl(160 18% 5%));
+  /* pin the gradient to the viewport so the glow stays put while content scrolls */
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.card {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 999px;
+}
+
+/* Branded native dropdowns — dark popup + custom chevron that never overlaps the field */
+select {
+  color-scheme: dark;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa3ae' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem;
+  padding-right: 2.1rem !important;
+}
+select option {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+/* Dark calendar/clock pickers for date/time inputs */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* --- Speed & smoothness --- */
+/* Instant tactile feedback on every clickable control */
+button:not(:disabled),
+a,
+[role="button"] {
+  transition:
+    transform 0.07s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+button:not(:disabled):active,
+[role="button"]:active {
+  transform: scale(0.97);
+}
+
+/* Skeleton shimmer for loading states */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--muted) / 0.7);
+  border-radius: 0.5rem;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--muted-foreground) / 0.1),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+
+/* AI typing dots */
+@keyframes bounceDot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+.ai-dot {
+  display: inline-block;
+  height: 5px;
+  width: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: bounceDot 1.2s infinite ease-in-out;
+}
+
+/* Content fade-in to smooth out late data */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.18s ease-out;
+}
