@@ -36,11 +36,11 @@ export default defineSchema({
       v.literal("done"),
     ),
     priority: v.union(v.literal("low"), v.literal("med"), v.literal("high")),
+    // The end/due moment (date + time). Doubles as the deadline.
     dueDate: v.optional(v.number()),
-    // Optional scheduled window (date + time). When set, the task shows on the
-    // Schedule timeline and Calendar at that exact date/time.
+    // Optional scheduled start (date + time). With dueDate as the end, the task
+    // shows on the Schedule timeline and Calendar at that exact window.
     startAt: v.optional(v.number()),
-    endAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),

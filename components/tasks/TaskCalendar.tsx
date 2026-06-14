@@ -55,12 +55,12 @@ export function TaskCalendar({
   function reschedule(taskId: Id<"tasks">, day: Date) {
     const t = tasks.find((x) => x._id === taskId);
     if (t?.startAt) {
-      // preserve the time of day; shift end by the same delta
+      // preserve the time of day; shift the due/end by the same delta
       const src = new Date(t.startAt);
       const dst = new Date(day);
       dst.setHours(src.getHours(), src.getMinutes(), 0, 0);
       const delta = dst.getTime() - t.startAt;
-      void updateTask({ id: taskId, startAt: dst.getTime(), endAt: t.endAt ? t.endAt + delta : undefined });
+      void updateTask({ id: taskId, startAt: dst.getTime(), dueDate: t.dueDate ? t.dueDate + delta : undefined });
     } else {
       const noon = new Date(day);
       noon.setHours(12, 0, 0, 0);
@@ -162,10 +162,10 @@ function Chip({
   task: Doc<"tasks">;
   onClick: () => void;
 }) {
-  // Show the scheduled time range (start–end) when set, else the start time.
+  // Show the scheduled time range (start–due) when a start time is set.
   const time = task.startAt
-    ? task.endAt
-      ? `${timeLabel(task.startAt)}–${timeLabel(task.endAt)}`
+    ? task.dueDate && task.dueDate > task.startAt
+      ? `${timeLabel(task.startAt)}–${timeLabel(task.dueDate)}`
       : timeLabel(task.startAt)
     : null;
   return (

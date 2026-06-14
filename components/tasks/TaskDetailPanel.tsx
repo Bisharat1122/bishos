@@ -94,15 +94,14 @@ export function TaskDetailPanel({
   const attachments = (task.attachments ?? []) as Attachment[];
   const areaSections =
     sections?.filter((s) => s.lifeAreaId === task.lifeAreaId) ?? [];
-  const dueValue = task.dueDate
-    ? new Date(task.dueDate).toISOString().slice(0, 10)
-    : "";
-  const toLocalInput = (ts?: number) => {
-    if (!ts) return "";
-    const d = new Date(ts);
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const dateOf = (ts?: number) =>
+    ts ? `${new Date(ts).getFullYear()}-${p2(new Date(ts).getMonth() + 1)}-${p2(new Date(ts).getDate())}` : "";
+  const timeOf = (ts?: number) => (ts ? `${p2(new Date(ts).getHours())}:${p2(new Date(ts).getMinutes())}` : "");
+  const setStart = (date: string, time: string) =>
+    void update({ id, startAt: date ? new Date(`${date}T${time || "09:00"}`).getTime() : null });
+  const setDue = (date: string, time: string) =>
+    void update({ id, dueDate: date ? new Date(`${date}T${time || "23:59"}`).getTime() : null });
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -238,48 +237,39 @@ export function TaskDetailPanel({
         </Field>
       </div>
 
-      {/* Due date */}
-      <Field label="Due date">
-        <input
-          type="date"
-          value={dueValue}
-          onChange={(e) =>
-            void update({
-              id,
-              dueDate: e.target.value
-                ? new Date(e.target.value + "T12:00:00").getTime()
-                : null,
-            })
-          }
-          className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-sm outline-none [color-scheme:dark]"
-        />
+      {/* Start (optional) — date + time, separate */}
+      <Field label="Start">
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="date"
+            value={dateOf(task.startAt)}
+            onChange={(e) => setStart(e.target.value, timeOf(task.startAt))}
+            className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
+          />
+          <input
+            type="time"
+            value={timeOf(task.startAt)}
+            onChange={(e) => setStart(dateOf(task.startAt), e.target.value)}
+            className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
+          />
+        </div>
       </Field>
 
-      {/* Scheduled window — shows on Schedule & Calendar at this exact time */}
-      <Field label="Scheduled time">
+      {/* Due / end — the deadline (date + time, separate) */}
+      <Field label="Due / end">
         <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="mb-1 block text-[11px] text-muted-foreground">Start</span>
-            <input
-              type="datetime-local"
-              value={toLocalInput(task.startAt)}
-              onChange={(e) =>
-                void update({ id, startAt: e.target.value ? new Date(e.target.value).getTime() : null })
-              }
-              className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[11px] text-muted-foreground">End</span>
-            <input
-              type="datetime-local"
-              value={toLocalInput(task.endAt)}
-              onChange={(e) =>
-                void update({ id, endAt: e.target.value ? new Date(e.target.value).getTime() : null })
-              }
-              className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
-            />
-          </label>
+          <input
+            type="date"
+            value={dateOf(task.dueDate)}
+            onChange={(e) => setDue(e.target.value, timeOf(task.dueDate))}
+            className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
+          />
+          <input
+            type="time"
+            value={timeOf(task.dueDate)}
+            onChange={(e) => setDue(dateOf(task.dueDate), e.target.value)}
+            className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm outline-none [color-scheme:dark]"
+          />
         </div>
       </Field>
 

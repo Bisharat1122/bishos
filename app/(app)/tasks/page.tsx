@@ -39,17 +39,16 @@ export default function TasksPage() {
   const [priority, setPriority] = useState<"low" | "med" | "high">("med");
   const [projectId, setProjectId] = useState<string>("");
   const [areaId, setAreaId] = useState<string>("");
-  const [due, setDue] = useState<string>("");
-  const [startAt, setStartAt] = useState<string>("");
-  const [endAt, setEndAt] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+  const [startTime, setStartTime] = useState<string>("");
+  const [dueDate, setDueDate] = useState<string>("");
+  const [dueTime, setDueTime] = useState<string>("");
 
   const openAdd = () => {
     setProjectId("");
     setAreaId(areas?.[0]?._id ?? "");
     setTitle("");
-    setDue("");
-    setStartAt("");
-    setEndAt("");
+    setStartDate(""); setStartTime(""); setDueDate(""); setDueTime("");
     setAddOpen(true);
   };
 
@@ -84,14 +83,11 @@ export default function TasksPage() {
       priority,
       lifeAreaId: effectiveAreaId as Id<"lifeAreas">,
       projectId: projectId ? (projectId as Id<"projects">) : undefined,
-      dueDate: due ? new Date(due + "T12:00:00").getTime() : undefined,
-      startAt: startAt ? new Date(startAt).getTime() : undefined,
-      endAt: endAt ? new Date(endAt).getTime() : undefined,
+      dueDate: dueDate ? new Date(`${dueDate}T${dueTime || "23:59"}`).getTime() : undefined,
+      startAt: startDate ? new Date(`${startDate}T${startTime || "09:00"}`).getTime() : undefined,
     });
     setTitle("");
-    setDue("");
-    setStartAt("");
-    setEndAt("");
+    setStartDate(""); setStartTime(""); setDueDate(""); setDueTime("");
     setAddOpen(false);
   }
 
@@ -264,36 +260,41 @@ export default function TasksPage() {
               </select>
             </div>
             <div>
-              <span className="mb-1 block text-xs text-muted-foreground">Due date (deadline)</span>
-              <input
-                type="date"
-                value={due}
-                onChange={(e) => setDue(e.target.value)}
-                className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
-              />
+              <span className="mb-1 block text-xs text-muted-foreground">Start (optional)</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
+                />
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="mb-1 block text-xs text-muted-foreground">Start (optional)</span>
+            <div>
+              <span className="mb-1 block text-xs text-muted-foreground">Due / end (optional)</span>
+              <div className="grid grid-cols-2 gap-2">
                 <input
-                  type="datetime-local"
-                  value={startAt}
-                  onChange={(e) => setStartAt(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
                 />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs text-muted-foreground">End (optional)</span>
                 <input
-                  type="datetime-local"
-                  value={endAt}
-                  onChange={(e) => setEndAt(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none [color-scheme:dark]"
                 />
-              </label>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Set a start/end time and the task appears on your Schedule & Calendar at that slot.
+              Add a start time and it appears on your Schedule & Calendar between start and due.
             </p>
             <button
               disabled={!title.trim() || !effectiveAreaId}

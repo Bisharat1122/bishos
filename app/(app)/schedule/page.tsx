@@ -262,7 +262,7 @@ export default function SchedulePage() {
                 {/* scheduled tasks (start/end time) — read-only, dashed */}
                 {(taskByDate.get(ds) ?? []).map((t) => {
                   const startMin = tsMin(t.startAt!);
-                  let endMin = t.endAt ? tsMin(t.endAt) : startMin + 30;
+                  let endMin = t.dueDate ? tsMin(t.dueDate) : startMin + 30;
                   if (endMin <= startMin) endMin = startMin + 30;
                   const top = (startMin / 60) * HOUR_PX;
                   const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX - 2);
