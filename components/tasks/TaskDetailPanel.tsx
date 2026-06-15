@@ -69,16 +69,45 @@ export function TaskDetailPanel({
   const [addOpen, setAddOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Track the latest typed description + what's been persisted so we can
+  // autosave (debounced) and flush on close — never lose typing.
+  const descRef = useRef<string | null>(null);
+  descRef.current = desc;
+  const savedDescRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (task) {
       setTitle(task.title);
       if (desc === null) {
         setDesc(task.description ?? "");
+        savedDescRef.current = task.description ?? "";
         setEditing(!task.description);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
+
+  // Debounced autosave of the description as you type.
+  useEffect(() => {
+    if (desc === null) return;
+    const t = setTimeout(() => {
+      if (savedDescRef.current !== desc) {
+        void update({ id, description: desc });
+        savedDescRef.current = desc;
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [desc, id, update]);
+
+  // Flush any unsaved description when the panel unmounts/closes.
+  useEffect(() => {
+    return () => {
+      const d = descRef.current;
+      if (d !== null && savedDescRef.current !== d) {
+        void update({ id, description: d });
+      }
+    };
+  }, [id, update]);
 
   if (task === undefined || task === null) {
     return (
@@ -310,7 +339,11 @@ export function TaskDetailPanel({
           </span>
           <button
             onClick={() => {
-              if (editing && desc !== null) update({ id, description: desc });
+              // Persist immediately when leaving edit mode (autosave also covers this).
+              if (editing && desc !== null && savedDescRef.current !== desc) {
+                void update({ id, description: desc });
+                savedDescRef.current = desc;
+              }
               setEditing((e) => !e);
             }}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
