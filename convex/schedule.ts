@@ -219,6 +219,105 @@ export const day = query({
   },
 });
 
+/**
+ * Per-task "planning accuracy": for each task scheduled in the window, compare
+ * the minutes you *blocked* on the calendar against the *real focus* you tracked
+ * (timer + manual logs). Auto-logged block-completion sessions are excluded —
+ * their duration equals the planned block, which would hide the gap. Returns a
+ * row per scheduled task plus the average gap, so you can calibrate your plan.
+ *
+ *   gap = scheduledMin - focusMin
+ *   gap > 0 → over-scheduled (blocked more than you focused)
+ *   gap < 0 → under-scheduled (focused more than you planned)
+ */
+export const gapAnalysis = query({
+  args: { startDate: v.string(), endDate: v.string() },
+  handler: async (ctx, { startDate, endDate }) => {
+    const userId = await requireUser(ctx);
+    const [blocks, allBlocks, focus, tasks, areas] = await Promise.all([
+      ctx.db
+        .query("scheduleBlocks")
+        .withIndex("by_user_date", (q) =>
+          q.eq("userId", userId).gte("date", startDate).lte("date", endDate),
+        )
+        .collect(),
+      ctx.db.query("scheduleBlocks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("lifeAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+
+    const windowStart = dayMs(startDate);
+    const windowEnd = dayMs(endDate) + DAY;
+
+    // Sessions created by marking a block "done" are planning artifacts, not
+    // real tracked focus — exclude them so the gap is honest.
+    const autoLogged = new Set<string>(
+      allBlocks.map((b) => b.focusSessionId).filter((x): x is NonNullable<typeof x> => !!x),
+    );
+
+    const taskById = new Map<string, (typeof tasks)[number]>(tasks.map((t) => [t._id, t]));
+    const areaName = (id?: string) => areas.find((a) => a._id === id)?.name;
+
+    // Scheduled minutes per task (blocks in window linked to a task).
+    const sched = new Map<string, { min: number; blocks: number }>();
+    for (const b of blocks) {
+      if (!b.taskId) continue;
+      const dur = Math.max(0, b.endMin - b.startMin);
+      const e = sched.get(b.taskId) ?? { min: 0, blocks: 0 };
+      sched.set(b.taskId, { min: e.min + dur, blocks: e.blocks + 1 });
+    }
+
+    // Real focus minutes per task (timer/manual, in window, excluding auto-logs).
+    const real = new Map<string, { sec: number; sessions: number }>();
+    for (const s of focus) {
+      if (!s.taskId) continue;
+      if (s.endTime < windowStart || s.endTime >= windowEnd) continue;
+      if (autoLogged.has(s._id)) continue;
+      const e = real.get(s.taskId) ?? { sec: 0, sessions: 0 };
+      real.set(s.taskId, { sec: e.sec + s.duration, sessions: e.sessions + 1 });
+    }
+
+    const rows = [...sched.entries()]
+      .map(([taskId, s]) => {
+        const r = real.get(taskId) ?? { sec: 0, sessions: 0 };
+        const scheduledMin = s.min;
+        const focusMin = Math.round(r.sec / 60);
+        const t = taskById.get(taskId);
+        return {
+          taskId,
+          title: t?.title ?? "(deleted task)",
+          area: areaName(t?.lifeAreaId),
+          scheduledMin,
+          focusMin,
+          gapMin: scheduledMin - focusMin,
+          blocks: s.blocks,
+          sessions: r.sessions,
+          adherence: scheduledMin > 0 ? Math.round((focusMin / scheduledMin) * 100) : 0,
+        };
+      })
+      .sort((a, b) => Math.abs(b.gapMin) - Math.abs(a.gapMin));
+
+    const totalScheduledMin = rows.reduce((a, r) => a + r.scheduledMin, 0);
+    const totalFocusMin = rows.reduce((a, r) => a + r.focusMin, 0);
+    // Average gap across scheduled tasks — the calibration signal.
+    const avgGapMin = rows.length
+      ? Math.round(rows.reduce((a, r) => a + r.gapMin, 0) / rows.length)
+      : 0;
+    // Tasks where focus was actually tracked (so the gap reflects real work).
+    const trackedCount = rows.filter((r) => r.sessions > 0).length;
+
+    return {
+      rows,
+      totalScheduledMin,
+      totalFocusMin,
+      avgGapMin,
+      taskCount: rows.length,
+      trackedCount,
+    };
+  },
+});
+
 /** Adherence + planned-vs-actual hours over a date window (for analytics cards
  * and the weekly review). */
 export const analytics = query({

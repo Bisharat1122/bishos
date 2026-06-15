@@ -18,6 +18,7 @@ import {
   WEEKDAYS, fmtMonthYear, fmtRange, fmtDay,
 } from "@/lib/date";
 import { ScheduleBlockModal, ymdLocal } from "@/components/schedule/ScheduleBlockModal";
+import { GapAnalysisCard } from "@/components/schedule/GapAnalysisCard";
 import { cn } from "@/lib/utils";
 
 type View = "day" | "week" | "month";
@@ -65,6 +66,10 @@ export default function SchedulePage() {
     endDate: ymdLocal(renderEnd),
   });
   const stats = useQuery(api.schedule.analytics, {
+    startDate: ymdLocal(analyticsStart),
+    endDate: ymdLocal(analyticsEnd),
+  });
+  const gap = useQuery(api.schedule.gapAnalysis, {
     startDate: ymdLocal(analyticsStart),
     endDate: ymdLocal(analyticsEnd),
   });
@@ -151,6 +156,11 @@ export default function SchedulePage() {
           <StatCard label="Actually focused" value={stats ? `${stats.actualHours}h` : "—"} sub="Logged this window" icon={<Gauge className="h-4 w-4" />} />
           <StatCard label="Adherence" value={stats ? `${stats.adherence}%` : "—"} sub={stats ? `${stats.done}/${stats.totalBlocks} done` : "blocks completed"} icon={<Target className="h-4 w-4" />} />
           <StatCard label="Top area" value={stats?.byArea[0]?.name ?? "—"} sub={stats?.byArea[0] ? `${stats.byArea[0].hours}h scheduled` : "by scheduled time"} icon={<CalendarDays className="h-4 w-4" />} />
+        </div>
+
+        {/* Schedule-vs-focus gap analysis */}
+        <div className="mt-3">
+          <GapAnalysisCard data={gap} view={view} />
         </div>
 
         {/* Nav */}
