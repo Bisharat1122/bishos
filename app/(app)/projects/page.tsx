@@ -96,10 +96,9 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {standardProjects.map((p) => {
-              const pct =
-                p.taskTotal > 0
-                  ? Math.round((p.taskDone / p.taskTotal) * 100)
-                  : p.progress;
+              // Mirror the progress you set inside the project (the slider),
+              // so the card stays in sync with the detail page & dashboard.
+              const pct = p.progress;
               return (
                 <Link key={p._id} href={`/projects/${p._id}`}>
                   <div className="group h-full rounded-2xl border border-border bg-card p-4 transition hover:border-primary/60">
