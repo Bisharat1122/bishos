@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { Flame, Check, Trash2 } from "lucide-react";
-import { Card, Topbar, EmptyState, AddButton, Modal } from "@/components/ui";
+import { Flame, Check, Trash2, Trophy, Gauge, CalendarCheck, ChevronRight } from "lucide-react";
+import { Card, Topbar, EmptyState, AddButton, Modal, StatCard } from "@/components/ui";
 import { AddToMomentum } from "@/components/momentum/AddToMomentum";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,22 @@ export default function HabitsPage() {
 
   const doneToday = habits?.filter((h) => h.completedToday).length ?? 0;
 
+  // Aggregate analytics across all habits for the summary card.
+  const summary = (() => {
+    if (!habits || habits.length === 0) return null;
+    const avgStreak = Math.round(
+      habits.reduce((a, h) => a + h.streak, 0) / habits.length,
+    );
+    const avgRate = Math.round(
+      habits.reduce((a, h) => a + (h.rate30 ?? 0), 0) / habits.length,
+    );
+    const record = habits.reduce(
+      (best, h) => ((h.bestStreak ?? 0) > best.bestStreak ? { bestStreak: h.bestStreak ?? 0, title: h.title } : best),
+      { bestStreak: 0, title: "—" },
+    );
+    return { avgStreak, avgRate, record };
+  })();
+
   const openAdd = () => {
     setAreaId(areas?.[0]?._id ?? "");
     setTitle("");
@@ -78,6 +95,36 @@ export default function HabitsPage() {
           </p>
         </div>
 
+        {/* Summary analytics */}
+        {summary && (
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard
+              label="Done today"
+              value={`${doneToday}/${habits!.length}`}
+              sub="habits checked off"
+              icon={<Check className="h-4 w-4" />}
+            />
+            <StatCard
+              label="Avg streak"
+              value={`${summary.avgStreak}d`}
+              sub="across all habits"
+              icon={<Flame className="h-4 w-4" />}
+            />
+            <StatCard
+              label="Longest ever"
+              value={`${summary.record.bestStreak}d`}
+              sub={summary.record.title}
+              icon={<Trophy className="h-4 w-4" />}
+            />
+            <StatCard
+              label="Consistency"
+              value={`${summary.avgRate}%`}
+              sub="last 30 days avg"
+              icon={<Gauge className="h-4 w-4" />}
+            />
+          </div>
+        )}
+
         {/* List */}
         <div className="mt-6 space-y-3">
           {habits?.length === 0 && (
@@ -98,19 +145,21 @@ export default function HabitsPage() {
                 <Check className="h-5 w-5" />
               </button>
 
-              <div className="min-w-0 flex-1">
+              <Link href={`/habits/${h._id}`} className="group min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold">{h.title}</h3>
+                  <h3 className="font-semibold group-hover:text-primary">{h.title}</h3>
                   {h.target && (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                       {h.target}
                     </span>
                   )}
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {areaName(h.lifeAreaId)} · {h.frequency}
+                  {h.bestStreak ? ` · best ${h.bestStreak}d` : ""}
                 </p>
-              </div>
+              </Link>
 
               {/* 7-day trail */}
               <div className="hidden items-center gap-1 sm:flex">
