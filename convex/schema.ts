@@ -370,4 +370,32 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_created", ["userId", "createdAt"]),
+
+  // Web Push subscriptions (one per browser/device). Used to deliver native
+  // desktop notifications at task start/end times even when no tab is open.
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
+
+  // Dedup ledger so a given task-start/-end event is pushed at most once.
+  // Key embeds the timestamp (`task-start-<id>-<startAt>`) so rescheduling
+  // a task re-arms a fresh notification.
+  sentPushes: defineTable({
+    userId: v.id("users"),
+    key: v.string(),
+    sentAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  // Singleton scan cursor — the push cron only fires for times crossing
+  // (lastScanAt, now], so enabling never backfires on past-due tasks.
+  pushState: defineTable({
+    lastScanAt: v.number(),
+  }),
 });

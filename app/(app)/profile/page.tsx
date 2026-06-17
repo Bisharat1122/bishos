@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Camera, Check, Loader2, Sparkles } from "lucide-react";
 import { Topbar, Card } from "@/components/ui";
+import { DesktopNotifications } from "@/components/push/DesktopNotifications";
 import { cn } from "@/lib/utils";
 
 type Fields = {
@@ -143,6 +144,11 @@ export default function ProfilePage() {
               <Sparkles className="h-3.5 w-3.5 text-primary" /> Your AI chat updates instantly with this.
             </span>
           </div>
+        </Card>
+
+        {/* Notifications */}
+        <Card className="mt-4">
+          <DesktopNotifications />
         </Card>
       </div>
     </div>

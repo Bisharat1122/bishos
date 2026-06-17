@@ -15,6 +15,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const startNav = () => setProgress(18);
 
+  // Register the push service worker once so desktop notifications can be
+  // delivered even when the app isn't the focused tab.
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   // ramp toward 90% while a navigation is pending
   useEffect(() => {
     if (progress > 0 && progress < 90) {
