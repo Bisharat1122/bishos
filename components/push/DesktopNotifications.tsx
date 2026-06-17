@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Bell, BellOff, Loader2, Send } from "lucide-react";
+import { Bell, BellOff, Loader2, Send, Volume2, VolumeX, Play } from "lucide-react";
+import { playChime, isChimeEnabled, setChimeEnabled, unlockChime } from "@/lib/chime";
 import { cn } from "@/lib/utils";
 
 /** VAPID public key (base64url) → Uint8Array for PushManager.subscribe. */
@@ -31,6 +32,9 @@ export function DesktopNotifications() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [soundOn, setSoundOn] = useState(true);
+
+  useEffect(() => setSoundOn(isChimeEnabled()), []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -103,6 +107,8 @@ export function DesktopNotifications() {
   async function sendTest() {
     setError(null);
     setTestMsg("Testing…");
+    unlockChime();
+    if (soundOn) void playChime(); // hear the bishOS chime immediately
     // 1) Local notification — proves the OS/browser will display at all.
     let localOk = false;
     try {
@@ -185,7 +191,47 @@ export function DesktopNotifications() {
       </div>
 
       {on && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
+          {/* Custom bishOS sound */}
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+            <div className="flex items-center gap-2 text-sm">
+              {soundOn ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+              <span>bishOS chime</span>
+              <button
+                onClick={() => {
+                  unlockChime();
+                  void playChime();
+                }}
+                className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <Play className="h-3 w-3" /> Preview
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                const next = !soundOn;
+                setSoundOn(next);
+                setChimeEnabled(next);
+                if (next) {
+                  unlockChime();
+                  void playChime();
+                }
+              }}
+              className={cn(
+                "relative h-5 w-9 shrink-0 rounded-full transition",
+                soundOn ? "bg-primary" : "bg-muted",
+              )}
+              aria-pressed={soundOn}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all",
+                  soundOn ? "left-[1.125rem]" : "left-0.5",
+                )}
+              />
+            </button>
+          </div>
+
           <button
             onClick={() => void sendTest()}
             className="flex w-fit items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
@@ -194,9 +240,10 @@ export function DesktopNotifications() {
           </button>
           {testMsg && <p className="text-xs text-muted-foreground">{testMsg}</p>}
           <p className="text-[11px] leading-relaxed text-muted-foreground/80">
-            Not seeing it? On Windows, open <span className="text-foreground">Settings → System → Notifications</span>,
-            make sure notifications are on for your browser and <span className="text-foreground">Do not disturb / Focus</span> is off.
-            Then check the notification next to the clock.
+            The bishOS chime plays when a bishOS tab is open; when it&apos;s fully closed, Windows&apos; own
+            notification sound is used. Not seeing the popup? On Windows, open{" "}
+            <span className="text-foreground">Settings → System → Notifications</span>, make sure notifications are on
+            for your browser and <span className="text-foreground">Do not disturb / Focus</span> is off.
           </p>
         </div>
       )}
