@@ -6,7 +6,6 @@ import { Menu, X, Sparkles } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { ModuleDockMount } from "@/components/ai/ModuleDockMount";
 import { FocusTimerProvider } from "@/components/focus/FocusTimerProvider";
-import { playChime, unlockChime, isChimeEnabled } from "@/lib/chime";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -17,27 +16,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const startNav = () => setProgress(18);
 
   // Register the push service worker once so desktop notifications can be
-  // delivered even when the app isn't the focused tab. Also play our custom
-  // chime when the SW signals an incoming notification (tab open).
+  // delivered even when the app isn't the focused tab.
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-
-    const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === "bishos-chime" && isChimeEnabled()) void playChime();
-    };
-    navigator.serviceWorker.addEventListener("message", onMsg);
-
-    // Unlock the audio context on the first user gesture so the chime can play.
-    const unlock = () => unlockChime();
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
-
-    return () => {
-      navigator.serviceWorker.removeEventListener("message", onMsg);
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
   }, []);
 
   // ramp toward 90% while a navigation is pending

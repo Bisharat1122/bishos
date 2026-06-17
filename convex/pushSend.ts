@@ -1,50 +1,8 @@
 "use node";
 
 import webpush from "web-push";
-import { action, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-
-/** Send a real Web Push to the current user's devices — validates the full
- * server→browser pipeline (VAPID + endpoint), not just local showNotification. */
-export const sendTestToMe = action({
-  args: {},
-  handler: async (ctx): Promise<{ sent: number; failed: number; error?: string }> => {
-    const pub = process.env.VAPID_PUBLIC_KEY;
-    const priv = process.env.VAPID_PRIVATE_KEY;
-    const subject = process.env.VAPID_SUBJECT || "mailto:devzelo.solutions@gmail.com";
-    if (!pub || !priv) return { sent: 0, failed: 0, error: "Server push keys not configured." };
-    webpush.setVapidDetails(subject, pub, priv);
-
-    const subs = await ctx.runQuery(internal.push.mySubsInternal, {});
-    if (subs.length === 0) {
-      return { sent: 0, failed: 0, error: "No subscribed device on the server. Toggle off, then on again." };
-    }
-
-    const payload = JSON.stringify({
-      title: "bishOS test ✅",
-      body: "Server push works — task alerts will arrive like this.",
-      href: "/tasks",
-      tag: "bishos-test",
-    });
-    let sent = 0;
-    let failed = 0;
-    let error: string | undefined;
-    for (const s of subs) {
-      try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
-        sent++;
-      } catch (e) {
-        failed++;
-        const code = (e as { statusCode?: number }).statusCode;
-        error = `${code ?? ""} ${(e as Error).message}`.trim();
-        if (code === 404 || code === 410) {
-          await ctx.runMutation(internal.push.pruneSub, { endpoint: s.endpoint });
-        }
-      }
-    }
-    return { sent, failed, error };
-  },
-});
 
 /** Runs every minute (see crons.ts). Sends a native desktop notification for
  * every task start/end event that just came due, to all of the user's
