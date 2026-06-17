@@ -54,6 +54,19 @@ export const unsubscribe = mutation({
   },
 });
 
+/** The current user's subscriptions (for the server-side test push). */
+export const mySubsInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const subs = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    return subs.map((s) => ({ endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth }));
+  },
+});
+
 // ---- internal: used by the send cron action ----
 
 type Event = { userId: string; key: string; title: string; body: string; href: string };

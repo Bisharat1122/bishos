@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Bell, BellOff, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,12 +23,14 @@ export function DesktopNotifications() {
   const status = useQuery(api.push.myStatus);
   const subscribeMut = useMutation(api.push.subscribe);
   const unsubscribeMut = useMutation(api.push.unsubscribe);
+  const sendServerTest = useAction(api.pushSend.sendTestToMe);
 
   const [support, setSupport] = useState<Support>("checking");
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -99,15 +101,36 @@ export function DesktopNotifications() {
   }
 
   async function sendTest() {
+    setError(null);
+    setTestMsg("Testing…");
+    // 1) Local notification — proves the OS/browser will display at all.
+    let localOk = false;
     try {
       const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification("bishOS test", {
-        body: "Desktop notifications are working 🎉",
+      await reg.showNotification("bishOS test (local)", {
+        body: "If you can see this, OS notifications are on.",
         icon: "/icon-192.png",
         badge: "/icon-192.png",
+        tag: "bishos-test-local",
       });
+      localOk = true;
     } catch {
-      setError("Couldn't show a test notification.");
+      /* handled below */
+    }
+    // 2) Real server push — proves the full task-alert pipeline.
+    try {
+      const r = await sendServerTest({});
+      if (r.sent > 0) {
+        setTestMsg(
+          `Sent ✓ — local ${localOk ? "shown" : "blocked"}, server push to ${r.sent} device${r.sent === 1 ? "" : "s"}. If nothing appeared, the OS is hiding it (see below).`,
+        );
+      } else {
+        setTestMsg(`Server push didn't send: ${r.error ?? "unknown"}. ${localOk ? "Local test was shown." : ""}`);
+      }
+    } catch (e) {
+      setTestMsg(
+        `Server test failed: ${(e as Error).message}.${localOk ? " Local test was shown." : " Local test also failed."}`,
+      );
     }
   }
 
@@ -162,12 +185,20 @@ export function DesktopNotifications() {
       </div>
 
       {on && (
-        <button
-          onClick={() => void sendTest()}
-          className="flex w-fit items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <Send className="h-3.5 w-3.5" /> Send a test notification
-        </button>
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => void sendTest()}
+            className="flex w-fit items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Send className="h-3.5 w-3.5" /> Send a test notification
+          </button>
+          {testMsg && <p className="text-xs text-muted-foreground">{testMsg}</p>}
+          <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+            Not seeing it? On Windows, open <span className="text-foreground">Settings → System → Notifications</span>,
+            make sure notifications are on for your browser and <span className="text-foreground">Do not disturb / Focus</span> is off.
+            Then check the notification next to the clock.
+          </p>
+        </div>
       )}
       {error && <p className="text-xs text-warning">{error}</p>}
     </div>
