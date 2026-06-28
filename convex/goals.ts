@@ -82,6 +82,7 @@ export const update = mutation({
     deadline: v.optional(v.union(v.number(), v.null())),
     lifeAreaId: v.optional(v.id("lifeAreas")),
     sectionId: v.optional(v.union(v.id("sections"), v.null())),
+    projectId: v.optional(v.union(v.id("projects"), v.null())),
     progress: v.optional(v.number()),
     tags: v.optional(v.array(v.string())),
     smart: v.optional(

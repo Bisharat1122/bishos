@@ -24,6 +24,7 @@ import { Card, Topbar, EmptyState } from "@/components/ui";
 import { DetailSkeleton } from "@/components/Skeleton";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToMomentum } from "@/components/momentum/AddToMomentum";
+import { SprintCommandCenter } from "@/components/projects/SprintCommandCenter";
 import { MarkdownLite } from "@/components/tasks/MarkdownLite";
 import { extractPdfText } from "@/lib/pdf";
 import { cn } from "@/lib/utils";
@@ -248,6 +249,9 @@ export default function ProjectPage() {
             </div>
           </Card>
         )}
+
+        {/* Sprint Command Center — multi-area hub: plan matrix + linked roll-up */}
+        {isSprint && <SprintCommandCenter id={id} />}
 
         {/* Standard status/progress */}
         {!isSprint && (

@@ -103,6 +103,21 @@ export default defineSchema({
       ),
     ),
     aiPlan: v.optional(v.string()),
+    // Sprint Command Center: extra life areas this sprint spans (primary stays
+    // in lifeAreaId), and the editable Now/30/60/90 plan matrix per area.
+    areaIds: v.optional(v.array(v.id("lifeAreas"))),
+    planGrid: v.optional(
+      v.array(
+        v.object({
+          areaId: v.id("lifeAreas"),
+          now: v.string(),
+          d30: v.string(),
+          d60: v.string(),
+          d90: v.string(),
+          status: v.optional(v.string()),
+        }),
+      ),
+    ),
   })
     .index("by_user", ["userId"])
     .index("by_lifeArea", ["lifeAreaId"]),
@@ -198,9 +213,12 @@ export default defineSchema({
     target: v.optional(v.string()),
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),
+    projectId: v.optional(v.id("projects")), // linked sprint (Command Center)
     streak: v.number(),
     lastCompletedAt: v.optional(v.number()),
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_project", ["projectId"]),
 
   habitCompletions: defineTable({
     userId: v.id("users"),

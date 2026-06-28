@@ -3,6 +3,9 @@ import { query, mutation, action } from "./_generated/server";
 import { api } from "./_generated/api";
 import { requireUser } from "./helpers";
 import { callOpenRouter } from "./openrouter";
+import { computeStreak, computeBestStreak } from "./habits";
+
+const ymd = (ts: number) => new Date(ts).toISOString().slice(0, 10);
 
 const statusValidator = v.union(
   v.literal("planning"),
@@ -114,6 +117,7 @@ export const update = mutation({
     endDate: v.optional(v.number()),
     attachments: v.optional(v.array(attachmentValidator)),
     aiPlan: v.optional(v.string()),
+    areaIds: v.optional(v.array(v.id("lifeAreas"))),
   },
   handler: async (ctx, { id, ...rest }) => {
     await requireUser(ctx);
@@ -172,7 +176,168 @@ export const remove = mutation({
     for (const t of tasks) await ctx.db.patch(t._id, { projectId: undefined });
     const goals = await ctx.db.query("goals").withIndex("by_project", (q) => q.eq("projectId", id)).collect();
     for (const g of goals) await ctx.db.patch(g._id, { projectId: undefined });
+    const habits = await ctx.db.query("habits").withIndex("by_project", (q) => q.eq("projectId", id)).collect();
+    for (const h of habits) await ctx.db.patch(h._id, { projectId: undefined });
     await ctx.db.delete(id);
+  },
+});
+
+/** Multi-area: set the life areas this sprint spans. */
+export const setAreas = mutation({
+  args: { id: v.id("projects"), areaIds: v.array(v.id("lifeAreas")) },
+  handler: async (ctx, { id, areaIds }) => {
+    const userId = await requireUser(ctx);
+    const p = await ctx.db.get(id);
+    if (!p || p.userId !== userId) return;
+    await ctx.db.patch(id, { areaIds });
+  },
+});
+
+/** Edit a single cell of the Plan matrix (creates the area's row if missing). */
+export const setPlanCell = mutation({
+  args: {
+    id: v.id("projects"),
+    areaId: v.id("lifeAreas"),
+    field: v.union(
+      v.literal("now"),
+      v.literal("d30"),
+      v.literal("d60"),
+      v.literal("d90"),
+      v.literal("status"),
+    ),
+    value: v.string(),
+  },
+  handler: async (ctx, { id, areaId, field, value }) => {
+    const userId = await requireUser(ctx);
+    const p = await ctx.db.get(id);
+    if (!p || p.userId !== userId) return;
+    const grid = (p.planGrid ?? []).map((r) => ({ ...r }));
+    let row = grid.find((r) => r.areaId === areaId);
+    if (!row) {
+      row = { areaId, now: "", d30: "", d60: "", d90: "", status: "" };
+      grid.push(row);
+    }
+    (row as Record<string, unknown>)[field] = value;
+    await ctx.db.patch(id, { planGrid: grid });
+  },
+});
+
+/**
+ * Sprint Command Center: everything linked to this sprint, aggregated.
+ * Linked goals/tasks via projectId, linked habits via projectId, areas via
+ * areaIds (+ the primary lifeAreaId), plus rolled-up stats.
+ */
+export const commandCenter = query({
+  args: { id: v.id("projects") },
+  handler: async (ctx, { id }) => {
+    const userId = await requireUser(ctx);
+    const project = await ctx.db.get(id);
+    if (!project || project.userId !== userId) return null;
+
+    const [areasAll, goals, habits, tasks, completions, sessions] = await Promise.all([
+      ctx.db.query("lifeAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("goals").withIndex("by_project", (q) => q.eq("projectId", id)).collect(),
+      ctx.db.query("habits").withIndex("by_project", (q) => q.eq("projectId", id)).collect(),
+      ctx.db.query("tasks").withIndex("by_project", (q) => q.eq("projectId", id)).collect(),
+      ctx.db.query("habitCompletions").withIndex("by_date", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+
+    const areaIdSet = new Set<string>([...(project.areaIds ?? []), project.lifeAreaId]);
+    const areas = areasAll
+      .filter((a) => areaIdSet.has(a._id))
+      .map((a) => ({ _id: a._id, name: a.name, color: a.color }));
+    const areaName = (idv?: string) => areasAll.find((a) => a._id === idv)?.name;
+
+    // habit completion sets → streaks + 30-day adherence
+    const compByHabit = new Map<string, Set<string>>();
+    for (const c of completions) {
+      if (!compByHabit.has(c.habitId)) compByHabit.set(c.habitId, new Set());
+      compByHabit.get(c.habitId)!.add(c.date);
+    }
+    const today = ymd(Date.now());
+    const last30 = new Set(Array.from({ length: 30 }, (_, i) => ymd(Date.now() - i * DAY)));
+    const habitRows = habits.map((h) => {
+      const dates = compByHabit.get(h._id) ?? new Set<string>();
+      let done30 = 0;
+      for (const d of dates) if (last30.has(d)) done30++;
+      return {
+        _id: h._id,
+        title: h.title,
+        lifeAreaId: h.lifeAreaId,
+        area: areaName(h.lifeAreaId),
+        streak: computeStreak(dates),
+        bestStreak: computeBestStreak(dates),
+        rate30: Math.round((done30 / 30) * 100),
+        completedToday: dates.has(today),
+      };
+    });
+
+    const goalRows = goals.map((g) => ({
+      _id: g._id,
+      title: g.title,
+      progress: g.progress,
+      deadline: g.deadline,
+      lifeAreaId: g.lifeAreaId,
+      area: areaName(g.lifeAreaId),
+    }));
+    const taskRows = tasks.map((t) => ({
+      _id: t._id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      lifeAreaId: t.lifeAreaId,
+      area: areaName(t.lifeAreaId),
+    }));
+
+    // focus roll-up over the sprint window (area-wide + project/task linked)
+    const from = project.startDate ?? project._creationTime;
+    const to = project.endDate ?? Date.now();
+    const linkedTaskIds = new Set(tasks.map((t) => t._id as string));
+    let focusSec = 0;
+    for (const s of sessions) {
+      if (s.endTime < from || s.endTime > to) continue;
+      const inScope =
+        s.projectId === id ||
+        (s.lifeAreaId && areaIdSet.has(s.lifeAreaId)) ||
+        (s.taskId && linkedTaskIds.has(s.taskId));
+      if (inScope) focusSec += s.duration;
+    }
+
+    const now = Date.now();
+    const daysLeft = project.endDate != null ? Math.ceil((project.endDate - now) / DAY) : null;
+    const tasksDone = tasks.filter((t) => t.status === "done").length;
+    const goalsAvg = goalRows.length
+      ? Math.round(goalRows.reduce((a, g) => a + g.progress, 0) / goalRows.length)
+      : 0;
+    const habitAdherence = habitRows.length
+      ? Math.round(habitRows.reduce((a, h) => a + h.rate30, 0) / habitRows.length)
+      : 0;
+    const timeElapsedPct =
+      project.startDate != null && project.endDate != null && project.endDate > project.startDate
+        ? Math.min(100, Math.max(0, Math.round(((now - project.startDate) / (project.endDate - project.startDate)) * 100)))
+        : 0;
+
+    return {
+      project: { ...project, kind: project.kind ?? "standard" },
+      areas,
+      goals: goalRows,
+      habits: habitRows,
+      tasks: taskRows,
+      milestones: project.milestones ?? [],
+      planGrid: project.planGrid ?? [],
+      stats: {
+        daysLeft,
+        milestonePct: project.progress,
+        goalsAvg,
+        habitAdherence,
+        focusHours: Math.round((focusSec / 3600) * 10) / 10,
+        tasksDone,
+        tasksTotal: tasks.length,
+        timeElapsedPct,
+      },
+    };
   },
 });
 

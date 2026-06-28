@@ -141,6 +141,7 @@ export const create = mutation({
     target: v.optional(v.string()),
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),
+    projectId: v.optional(v.id("projects")),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -157,6 +158,7 @@ export const update = mutation({
     target: v.optional(v.union(v.string(), v.null())),
     lifeAreaId: v.optional(v.id("lifeAreas")),
     sectionId: v.optional(v.union(v.id("sections"), v.null())),
+    projectId: v.optional(v.union(v.id("projects"), v.null())),
   },
   handler: async (ctx, { id, ...rest }) => {
     const userId = await requireUser(ctx);
