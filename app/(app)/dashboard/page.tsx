@@ -26,6 +26,8 @@ export default function DashboardPage() {
     start: cStart ? new Date(cStart + "T00:00:00").getTime() : undefined,
     end: cEnd ? new Date(cEnd + "T00:00:00").getTime() : undefined,
   };
+  const profile = useQuery(api.profile.get);
+  const firstName = profile?.name?.trim().split(/\s+/)[0];
   const o = useQuery(api.dashboard.overview, rangeArgs);
   const ra = useQuery(api.focus.rangeAnalytics, rangeArgs);
   const notifs = useQuery(api.notifications.list);
@@ -46,7 +48,7 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Welcome back, Bish 👋</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Welcome back{firstName ? `, ${firstName}` : ""} 👋</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Your whole life at a glance — pick a window, every module updates.
             </p>
