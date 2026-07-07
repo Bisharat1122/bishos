@@ -105,7 +105,7 @@ export default function ChatPage() {
   const [editTitle, setEditTitle] = useState("");
   const [saveContent, setSaveContent] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [pendingProvider, setPendingProvider] = useState<ModelKey>("gpt-oss");
+  const [pendingProvider, setPendingProvider] = useState<ModelKey>("hy3");
 
   // Legacy threads may still carry the retired "perplexity" value — map those to
   // the default so the toggle stays type-safe and shows a valid active model.
@@ -113,7 +113,7 @@ export default function ChatPage() {
   const activeProvider: ModelKey = threadId
     ? storedProvider && storedProvider !== "perplexity"
       ? storedProvider
-      : "gpt-oss"
+      : "hy3"
     : pendingProvider;
 
   function chooseProvider(p: ModelKey) {

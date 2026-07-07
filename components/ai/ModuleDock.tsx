@@ -63,7 +63,7 @@ export function ModuleDock({ module }: { module: string }) {
   const [threadId, setThreadId] = useState<Id<"aiThreads"> | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [model, setModel] = useState<ModelKey>("gpt-oss");
+  const [model, setModel] = useState<ModelKey>("hy3");
 
   const ensureThread = useMutation(api.agent.ensureModuleThread);
   const setProvider = useMutation(api.aiThreads.setProvider);
@@ -100,7 +100,7 @@ export function ModuleDock({ module }: { module: string }) {
     if (!id) {
       id = await ensureThread({ module });
       setThreadId(id);
-      if (model !== "gpt-oss") await setProvider({ threadId: id, provider: model });
+      if (model !== "hy3") await setProvider({ threadId: id, provider: model });
     }
     setInput("");
     setSending(true);

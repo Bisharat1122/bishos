@@ -591,7 +591,7 @@ export const moduleChat = action({
       ctx.runQuery(internal.ai.threadProvider, { threadId }),
     ]);
 
-    const modelKey = (provider ?? "gpt-oss") as string;
+    const modelKey = (provider ?? "hy3") as string;
     const canAct = (MODELS as Record<string, { toolCalling: boolean }>)[modelKey]?.toolCalling ?? false;
     const tools = canAct ? MODULE_TOOLS[module] ?? [] : [];
 
@@ -1089,7 +1089,7 @@ export const ensureModuleThread = mutation({
       .first();
     if (existing) return existing._id;
     const title = `${module.charAt(0).toUpperCase()}${module.slice(1)} assistant`;
-    return ctx.db.insert("aiThreads", { userId, title, moduleKey: module, provider: "gpt-oss" });
+    return ctx.db.insert("aiThreads", { userId, title, moduleKey: module, provider: "hy3" });
   },
 });
 
