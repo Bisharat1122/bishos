@@ -12,11 +12,12 @@ import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AiDots } from "@/components/Skeleton";
 import { cn } from "@/lib/utils";
 
-type ModelKey = "gpt-oss" | "owl" | "openrouter" | "perplexity";
+type ModelKey = "gpt-oss" | "owl" | "openrouter" | "hy3" | "perplexity";
 const DOCK_MODELS: { key: ModelKey; label: string }[] = [
   { key: "gpt-oss", label: "gpt-oss" },
   { key: "owl", label: "Owl" },
   { key: "openrouter", label: "Nemotron" },
+  { key: "hy3", label: "Hunyuan" },
   { key: "perplexity", label: "Perplexity" },
 ];
 

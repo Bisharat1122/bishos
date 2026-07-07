@@ -53,6 +53,7 @@ export const setProvider = mutation({
       v.literal("openrouter"),
       v.literal("gpt-oss"),
       v.literal("owl"),
+      v.literal("hy3"),
       v.literal("perplexity"),
     ),
   },

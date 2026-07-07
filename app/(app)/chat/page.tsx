@@ -22,11 +22,12 @@ type Ref = { type: "project" | "note" | "lifeArea"; id: string; label: string };
 
 // Per-conversation model toggle. Keys match `aiThreads.provider` / MODELS in
 // convex/openrouter.ts. "openrouter" is Nemotron (legacy key).
-type ModelKey = "openrouter" | "gpt-oss" | "owl" | "perplexity";
+type ModelKey = "openrouter" | "gpt-oss" | "owl" | "hy3" | "perplexity";
 const MODEL_CHIPS: { key: ModelKey; label: string; tag: string; title: string }[] = [
   { key: "openrouter", label: "Nemotron", tag: "FREE", title: "NVIDIA Nemotron 3 Ultra 550B — free, deep reasoning (slower)" },
   { key: "gpt-oss", label: "gpt-oss", tag: "FREE", title: "OpenAI gpt-oss 120B — free, fast, best for actions/tool-use" },
   { key: "owl", label: "Owl", tag: "FREE", title: "Owl Alpha — free, 1M context, agentic generalist" },
+  { key: "hy3", label: "Hunyuan", tag: "FREE", title: "Tencent Hunyuan HY3 — free, agentic generalist" },
   { key: "perplexity", label: "Perplexity", tag: "$", title: "Perplexity sonar — paid, live web-grounded research" },
 ];
 

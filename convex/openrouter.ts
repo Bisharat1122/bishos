@@ -32,6 +32,12 @@ export const MODELS = {
     label: "Owl Alpha",
     toolCalling: true,
   },
+  hy3: {
+    provider: "openrouter" as const,
+    model: "tencent/hy3:free",
+    label: "Hunyuan",
+    toolCalling: true,
+  },
   perplexity: {
     provider: "perplexity" as const,
     model: "sonar",
