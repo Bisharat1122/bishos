@@ -1,17 +1,17 @@
-// Shared AI caller with retry/backoff. Supports two providers, switchable via
-// the AI_PROVIDER env var ("openrouter" [default] or "perplexity"). The previous
-// OpenRouter/Nemotron setup is preserved — Perplexity is added alongside it.
+// Shared AI caller with retry/backoff. All models are hosted on OpenRouter and
+// share the one OPENROUTER_API_KEY; the selected model id is switchable per
+// conversation (see MODELS below) or via the AI_PROVIDER / OPENROUTER_MODEL env.
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 /**
  * Selectable models, keyed by the value stored on `aiThreads.provider`.
- * Legacy keys "openrouter" (= Nemotron) and "perplexity" are preserved so
- * existing threads keep working without a migration. All OpenRouter-hosted
- * models share the one OPENROUTER_API_KEY; only Perplexity uses its own key.
+ * The legacy key "openrouter" (= Nemotron) is preserved so existing threads
+ * keep working without a migration. All models are OpenRouter-hosted and share
+ * the one OPENROUTER_API_KEY.
  *
  * `toolCalling` flags whether the model can drive agentic tool/function calls
- * (used by the per-module AI windows). Perplexity can't, so it stays chat-only.
+ * (used by the per-module AI windows).
  */
 export const MODELS = {
   openrouter: {
@@ -38,12 +38,6 @@ export const MODELS = {
     label: "Hunyuan",
     toolCalling: true,
   },
-  perplexity: {
-    provider: "perplexity" as const,
-    model: "sonar",
-    label: "Perplexity",
-    toolCalling: false,
-  },
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
@@ -53,16 +47,9 @@ export type ModelKey = keyof typeof MODELS;
  * Nemotron. */
 export function aiConfig(override?: string) {
   const key = (override ?? process.env.AI_PROVIDER ?? "openrouter") as string;
+  // Unknown keys (including the retired "perplexity" value on legacy threads)
+  // fall back to Nemotron so old conversations keep working.
   const entry = (MODELS as Record<string, (typeof MODELS)[ModelKey]>)[key] ?? MODELS.openrouter;
-  if (entry.provider === "perplexity") {
-    return {
-      provider: "perplexity" as const,
-      endpoint: "https://api.perplexity.ai/chat/completions",
-      apiKey: process.env.PERPLEXITY_API_KEY,
-      model: process.env.PERPLEXITY_MODEL ?? entry.model,
-      keyName: "PERPLEXITY_API_KEY",
-    };
-  }
   return {
     provider: "openrouter" as const,
     endpoint: "https://openrouter.ai/api/v1/chat/completions",

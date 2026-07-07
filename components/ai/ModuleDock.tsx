@@ -12,13 +12,12 @@ import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AiDots } from "@/components/Skeleton";
 import { cn } from "@/lib/utils";
 
-type ModelKey = "gpt-oss" | "owl" | "openrouter" | "hy3" | "perplexity";
+type ModelKey = "gpt-oss" | "owl" | "openrouter" | "hy3";
 const DOCK_MODELS: { key: ModelKey; label: string }[] = [
   { key: "gpt-oss", label: "gpt-oss" },
   { key: "owl", label: "Owl" },
   { key: "openrouter", label: "Nemotron" },
   { key: "hy3", label: "Hunyuan" },
-  { key: "perplexity", label: "Perplexity" },
 ];
 
 const PROMPTS: Record<string, string[]> = {
@@ -158,13 +157,11 @@ export function ModuleDock({ module }: { module: string }) {
               <button
                 key={m.key}
                 onClick={() => chooseModel(m.key)}
-                title={m.key === "perplexity" ? "Research-only — can't take actions" : `${m.label} — free, can take actions`}
+                title={`${m.label} — free, can take actions`}
                 className={cn(
                   "rounded-full px-2 py-0.5 text-[11px] font-medium transition",
                   model === m.key
-                    ? m.key === "perplexity"
-                      ? "bg-sprint text-white"
-                      : "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:text-foreground",
                 )}
               >

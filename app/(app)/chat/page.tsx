@@ -22,13 +22,12 @@ type Ref = { type: "project" | "note" | "lifeArea"; id: string; label: string };
 
 // Per-conversation model toggle. Keys match `aiThreads.provider` / MODELS in
 // convex/openrouter.ts. "openrouter" is Nemotron (legacy key).
-type ModelKey = "openrouter" | "gpt-oss" | "owl" | "hy3" | "perplexity";
+type ModelKey = "openrouter" | "gpt-oss" | "owl" | "hy3";
 const MODEL_CHIPS: { key: ModelKey; label: string; tag: string; title: string }[] = [
   { key: "openrouter", label: "Nemotron", tag: "FREE", title: "NVIDIA Nemotron 3 Ultra 550B — free, deep reasoning (slower)" },
   { key: "gpt-oss", label: "gpt-oss", tag: "FREE", title: "OpenAI gpt-oss 120B — free, fast, best for actions/tool-use" },
   { key: "owl", label: "Owl", tag: "FREE", title: "Owl Alpha — free, 1M context, agentic generalist" },
   { key: "hy3", label: "Hunyuan", tag: "FREE", title: "Tencent Hunyuan HY3 — free, agentic generalist" },
-  { key: "perplexity", label: "Perplexity", tag: "$", title: "Perplexity sonar — paid, live web-grounded research" },
 ];
 
 const QUICK = [
@@ -106,10 +105,15 @@ export default function ChatPage() {
   const [editTitle, setEditTitle] = useState("");
   const [saveContent, setSaveContent] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [pendingProvider, setPendingProvider] = useState<ModelKey>("perplexity");
+  const [pendingProvider, setPendingProvider] = useState<ModelKey>("gpt-oss");
 
+  // Legacy threads may still carry the retired "perplexity" value — map those to
+  // the default so the toggle stays type-safe and shows a valid active model.
+  const storedProvider = threads?.find((t) => t._id === threadId)?.provider;
   const activeProvider: ModelKey = threadId
-    ? threads?.find((t) => t._id === threadId)?.provider ?? "perplexity"
+    ? storedProvider && storedProvider !== "perplexity"
+      ? storedProvider
+      : "gpt-oss"
     : pendingProvider;
 
   function chooseProvider(p: ModelKey) {
@@ -270,7 +274,6 @@ export default function ChatPage() {
             <div className="flex rounded-full border border-border p-0.5 text-xs">
               {MODEL_CHIPS.map((m) => {
                 const active = activeProvider === m.key;
-                const paid = m.key === "perplexity";
                 return (
                   <button
                     key={m.key}
@@ -279,9 +282,7 @@ export default function ChatPage() {
                     className={cn(
                       "flex items-center gap-1 rounded-full px-2.5 py-1 font-medium transition",
                       active
-                        ? paid
-                          ? "bg-sprint text-white"
-                          : "bg-primary text-primary-foreground"
+                        ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -289,7 +290,7 @@ export default function ChatPage() {
                     <span
                       className={cn(
                         "rounded px-1 text-[9px]",
-                        active ? (paid ? "bg-white/20" : "bg-primary-foreground/20") : "bg-muted",
+                        active ? "bg-primary-foreground/20" : "bg-muted",
                       )}
                     >
                       {m.tag}

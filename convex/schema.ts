@@ -252,6 +252,9 @@ export default defineSchema({
     contextRefs: v.optional(v.array(v.any())), // /add targets
     // per-conversation AI model override (keys map to MODELS in openrouter.ts).
     // "openrouter" = Nemotron (legacy value, kept for back-compat).
+    // "perplexity" is retired and no longer selectable, but the literal stays
+    // here so existing threads that stored it still validate; those threads now
+    // fall back to Nemotron at runtime (see aiConfig).
     provider: v.optional(
       v.union(
         v.literal("openrouter"),
