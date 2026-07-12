@@ -65,6 +65,41 @@ export const create = mutation({
   },
 });
 
+/**
+ * Duplicate a task, copying every field. `startAt`/`dueDate` override the
+ * source's dates (the client shifts them to the chosen day, preserving each
+ * time-of-day and the gap between start and due). Omit an arg to keep the
+ * source value; pass null to clear it. The copy starts fresh: not_started,
+ * no completedAt, and a new order so it sorts to the top.
+ */
+export const duplicate = mutation({
+  args: {
+    id: v.id("tasks"),
+    startAt: v.optional(v.union(v.number(), v.null())),
+    dueDate: v.optional(v.union(v.number(), v.null())),
+  },
+  handler: async (ctx, { id, startAt, dueDate }) => {
+    const userId = await requireUser(ctx);
+    const src = await ctx.db.get(id);
+    if (!src || src.userId !== userId) throw new Error("Task not found");
+    return ctx.db.insert("tasks", {
+      userId,
+      title: src.title,
+      description: src.description,
+      priority: src.priority,
+      status: "not_started",
+      startAt: startAt === undefined ? src.startAt : (startAt ?? undefined),
+      dueDate: dueDate === undefined ? src.dueDate : (dueDate ?? undefined),
+      lifeAreaId: src.lifeAreaId,
+      sectionId: src.sectionId,
+      projectId: src.projectId,
+      tags: src.tags,
+      attachments: src.attachments,
+      order: Date.now(),
+    });
+  },
+});
+
 export const update = mutation({
   args: {
     id: v.id("tasks"),

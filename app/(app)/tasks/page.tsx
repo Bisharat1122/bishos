@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
-import { LayoutGrid, CalendarDays, Columns2, Table } from "lucide-react";
+import { Doc, Id } from "@/convex/_generated/dataModel";
+import { LayoutGrid, CalendarDays, Columns2, Table, X } from "lucide-react";
 import { Topbar, AddButton, Modal } from "@/components/ui";
 import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskCalendar } from "@/components/tasks/TaskCalendar";
@@ -22,6 +22,25 @@ const VIEWS: { key: View; label: string; icon: typeof LayoutGrid }[] = [
   { key: "list", label: "List", icon: Table },
 ];
 
+const LIST_STATUSES = [
+  { key: "all", label: "All" },
+  { key: "remaining", label: "Remaining" },
+  { key: "completed", label: "Completed" },
+] as const;
+type ListStatus = (typeof LIST_STATUSES)[number]["key"];
+
+/** True if the task's start→due span (or its single date) overlaps `dayStr`. */
+function overlapsDay(t: Doc<"tasks">, dayStr: string) {
+  const dayStart = new Date(`${dayStr}T00:00:00`).getTime();
+  const dayEnd = new Date(`${dayStr}T23:59:59.999`).getTime();
+  const s = t.startAt ?? null;
+  const d = t.dueDate ?? null;
+  if (s == null && d == null) return false; // undated tasks drop out when filtering by day
+  const lo = Math.min(s ?? (d as number), d ?? (s as number));
+  const hi = Math.max(s ?? (d as number), d ?? (s as number));
+  return lo <= dayEnd && hi >= dayStart;
+}
+
 export default function TasksPage() {
   const areas = useQuery(api.lifeAreas.list);
   const sections = useQuery(api.sections.list, {});
@@ -32,6 +51,10 @@ export default function TasksPage() {
   const [view, setView] = useState<View>("board");
   const [areaFilter, setAreaFilter] = useState<string>("");
   const [selected, setSelected] = useState<Id<"tasks"> | null>(null);
+
+  // List-view-only filters
+  const [listStatus, setListStatus] = useState<ListStatus>("all");
+  const [listDate, setListDate] = useState<string>("");
 
   // create form
   const [addOpen, setAddOpen] = useState(false);
@@ -73,6 +96,18 @@ export default function TasksPage() {
     () =>
       sortTasks((tasks ?? []).filter((t) => !areaFilter || t.lifeAreaId === areaFilter)),
     [tasks, areaFilter],
+  );
+
+  // The List view narrows further by status (completed / remaining) and day.
+  const listFiltered = useMemo(
+    () =>
+      filtered.filter((t) => {
+        if (listStatus === "remaining" && t.status === "done") return false;
+        if (listStatus === "completed" && t.status !== "done") return false;
+        if (listDate && !overlapsDay(t, listDate)) return false;
+        return true;
+      }),
+    [filtered, listStatus, listDate],
   );
 
   function submit(e: React.FormEvent) {
@@ -143,6 +178,47 @@ export default function TasksPage() {
           </div>
         </div>
 
+        {/* List-only filters: completed / remaining + a day filter */}
+        {view === "list" && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="flex rounded-full border border-border p-0.5">
+              {LIST_STATUSES.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setListStatus(s.key)}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-sm font-medium transition",
+                    listStatus === s.key
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="date"
+              value={listDate}
+              onChange={(e) => setListDate(e.target.value)}
+              className="rounded-full border border-border bg-muted/40 px-3 py-2 text-sm outline-none [color-scheme:dark]"
+            />
+            {listDate && (
+              <button
+                onClick={() => setListDate("")}
+                className="flex items-center gap-1 rounded-full border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" /> Clear date
+              </button>
+            )}
+
+            <span className="ml-auto text-sm text-muted-foreground">
+              {listFiltered.length} task{listFiltered.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
+
         {/* Views */}
         <div className="flex-1 overflow-y-auto">
           {view === "board" && (
@@ -156,7 +232,7 @@ export default function TasksPage() {
           )}
           {view === "list" && (
             <TaskList
-              tasks={filtered}
+              tasks={listFiltered}
               areaName={areaName}
               sectionName={sectionName}
               onSelect={setSelected}

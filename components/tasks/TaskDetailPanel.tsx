@@ -16,11 +16,13 @@ import {
   Tag,
   Clock,
   Timer,
+  Copy,
 } from "lucide-react";
 import { SlashEditor } from "@/components/editor/SlashEditor";
 import { MarkdownLite } from "./MarkdownLite";
 import { AddToMomentum } from "@/components/momentum/AddToMomentum";
 import { TaskTimerButton } from "./TaskTimerButton";
+import { DuplicateTaskModal } from "./DuplicateTaskModal";
 import { cn } from "@/lib/utils";
 
 type Status = "not_started" | "in_progress" | "done";
@@ -67,6 +69,7 @@ export function TaskDetailPanel({
   const [tagInput, setTagInput] = useState("");
   const [uploading, setUploading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [dupOpen, setDupOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Track the latest typed description + what's been persisted so we can
@@ -488,16 +491,28 @@ export function TaskDetailPanel({
         )}
       </Field>
 
-      {/* Delete */}
-      <button
-        onClick={async () => {
-          await removeTask({ id });
-          onClose();
-        }}
-        className="mt-2 flex items-center gap-2 text-sm text-muted-foreground hover:text-warning"
-      >
-        <Trash2 className="h-4 w-4" /> Delete task
-      </button>
+      {/* Actions */}
+      <div className="mt-2 flex items-center gap-4">
+        <button
+          onClick={() => setDupOpen(true)}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"
+        >
+          <Copy className="h-4 w-4" /> Duplicate task
+        </button>
+        <button
+          onClick={async () => {
+            await removeTask({ id });
+            onClose();
+          }}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-warning"
+        >
+          <Trash2 className="h-4 w-4" /> Delete task
+        </button>
+      </div>
+
+      {dupOpen && (
+        <DuplicateTaskModal task={task} onClose={() => setDupOpen(false)} />
+      )}
     </Shell>
   );
 }
