@@ -11,6 +11,7 @@ const typeValidator = v.union(
   v.literal("habit"),
   v.literal("lifeArea"),
   v.literal("section"),
+  v.literal("challenge"),
 );
 
 /** Log a new momentum moment (repeatable — same item can be added many times). */

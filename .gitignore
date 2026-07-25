@@ -7,3 +7,6 @@ build
 *.tsbuildinfo
 next-env.d.ts
 .convex
+
+# Local source media (served copy lives in public/music)
+assets

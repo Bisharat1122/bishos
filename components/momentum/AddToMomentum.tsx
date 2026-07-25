@@ -7,7 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { TrendingUp, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type MomentumType = "task" | "goal" | "project" | "note" | "habit" | "lifeArea" | "section";
+type MomentumType = "task" | "goal" | "project" | "note" | "habit" | "lifeArea" | "section" | "challenge";
 
 const POPOVER_W = 288; // px (w-72)
 

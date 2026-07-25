@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   X,
   Trash2,
@@ -17,6 +18,9 @@ import {
   Clock,
   Timer,
   Copy,
+  PanelRight,
+  Square,
+  Maximize2,
 } from "lucide-react";
 import { SlashEditor } from "@/components/editor/SlashEditor";
 import { MarkdownLite } from "./MarkdownLite";
@@ -45,13 +49,20 @@ const fmtDur = (sec: number) => {
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 };
 
+/** Notion-style views: side peek (default), center peek, or full page. */
+export type TaskView = "side" | "center" | "page";
+
 export function TaskDetailPanel({
   id,
   onClose,
+  view: initialView = "side",
 }: {
   id: Id<"tasks">;
-  onClose: () => void;
+  onClose?: () => void;
+  view?: TaskView;
 }) {
+  const [view, setView] = useState<TaskView>(initialView);
+  const router = useRouter();
   const task = useQuery(api.tasks.get, { id });
   const areas = useQuery(api.lifeAreas.list);
   const sections = useQuery(api.sections.list, {});
@@ -114,7 +125,7 @@ export function TaskDetailPanel({
 
   if (task === undefined || task === null) {
     return (
-      <Shell onClose={onClose}>
+      <Shell onClose={onClose} view={view} setView={setView} taskId={id}>
         <p className="text-sm text-muted-foreground">
           {task === null ? "Task not found." : "Loading…"}
         </p>
@@ -165,7 +176,7 @@ export function TaskDetailPanel({
   }
 
   return (
-    <Shell onClose={onClose}>
+    <Shell onClose={onClose} view={view} setView={setView} taskId={id}>
       <input
         ref={fileRef}
         type="file"
@@ -502,7 +513,8 @@ export function TaskDetailPanel({
         <button
           onClick={async () => {
             await removeTask({ id });
-            onClose();
+            if (onClose) onClose();
+            else router.push("/tasks");
           }}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-warning"
         >
@@ -517,18 +529,104 @@ export function TaskDetailPanel({
   );
 }
 
+/** View switcher — side peek · center peek · full page (Notion-style). */
+function ViewSwitcher({
+  view,
+  setView,
+  taskId,
+  onClose,
+}: {
+  view: TaskView;
+  setView: (v: TaskView) => void;
+  taskId: Id<"tasks">;
+  onClose?: () => void;
+}) {
+  const router = useRouter();
+  const btn = (active: boolean) =>
+    cn(
+      "flex h-7 w-7 items-center justify-center rounded-md transition",
+      active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+    );
+  return (
+    <div className="flex items-center gap-0.5">
+      <button title="Side peek" onClick={() => setView("side")} className={btn(view === "side")}>
+        <PanelRight className="h-4 w-4" />
+      </button>
+      <button title="Center peek" onClick={() => setView("center")} className={btn(view === "center")}>
+        <Square className="h-4 w-4" />
+      </button>
+      <button
+        title="Open as full page"
+        onClick={() => {
+          // Remember exactly where this was opened from (path + query), so
+          // "Back" returns to the same page/tab instead of guessing.
+          const from = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
+          onClose?.();
+          router.push(`/tasks/${taskId}${from ? `?from=${encodeURIComponent(from)}` : ""}`);
+        }}
+        className={btn(false)}
+      >
+        <Maximize2 className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 function Shell({
   children,
   onClose,
+  view,
+  setView,
+  taskId,
 }: {
   children: React.ReactNode;
-  onClose: () => void;
+  onClose?: () => void;
+  view: TaskView;
+  setView: (v: TaskView) => void;
+  taskId: Id<"tasks">;
 }) {
+  const router = useRouter();
+
+  // Full page — rendered inline by /tasks/[id], no overlay.
+  if (view === "page") {
+    // Return to wherever the task was opened from (?from=…), else browser back.
+    const goBack = () => {
+      if (onClose) return onClose();
+      const from = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("from") : null;
+      if (from) router.push(from);
+      else router.back();
+    };
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8">
+        <div className="mb-4 flex items-center justify-between">
+          <button onClick={goBack} className="text-sm text-muted-foreground hover:text-foreground">
+            ← Back
+          </button>
+          <div className="flex items-center gap-0.5">
+            <button title="Side peek" onClick={goBack} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+              <PanelRight className="h-4 w-4" />
+            </button>
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-foreground" title="Full page">
+              <Maximize2 className="h-4 w-4" />
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4">{children}</div>
+      </div>
+    );
+  }
+
+  const frame =
+    view === "center"
+      ? "absolute left-1/2 top-1/2 flex max-h-[88vh] w-[min(56rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-background p-6 shadow-2xl"
+      : "absolute right-0 top-0 flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto border-l border-border bg-background p-6 shadow-2xl";
+
   return (
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto border-l border-border bg-background p-6 shadow-2xl">
-        <div className="flex justify-end">
+      <div className={frame}>
+        <div className="flex items-center justify-between">
+          <ViewSwitcher view={view} setView={setView} taskId={taskId} onClose={onClose} />
           <button
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-muted"

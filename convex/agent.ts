@@ -416,7 +416,7 @@ function buildModulePrompt(
 
 /** Areas + a one-line summary of the module's existing items, for the prompt. */
 export const moduleFacts = internalQuery({
-  args: { module: v.string() },
+  args: { module: v.string(), challengeId: v.optional(v.id("challenges")) },
   handler: async (ctx, { module }) => {
     const userId = await requireUser(ctx);
     const areas = await ctx.db
@@ -579,14 +579,23 @@ function labelFor(tc: ToolCall): string {
 
 // ---- Main agentic action -----------------------------------------------
 
+export const threadChallengeId = internalQuery({
+  args: { threadId: v.id("aiThreads") },
+  handler: async (ctx, { threadId }) => {
+    const t = await ctx.db.get(threadId);
+    return t?.challengeId ?? null;
+  },
+});
+
 export const moduleChat = action({
   args: { threadId: v.id("aiThreads"), module: v.string(), message: v.string() },
   handler: async (ctx, { threadId, module, message }): Promise<void> => {
     await ctx.runMutation(internal.agent.insertUser, { threadId, content: message });
 
+    const challengeId = await ctx.runQuery(internal.agent.threadChallengeId, { threadId });
     const [context, facts, history, provider] = await Promise.all([
       ctx.runQuery(internal.ai.gatherContext, {}),
-      ctx.runQuery(internal.agent.moduleFacts, { module }),
+      ctx.runQuery(internal.agent.moduleFacts, { module, challengeId: challengeId ?? undefined }),
       ctx.runQuery(internal.ai.historyMessages, { threadId }),
       ctx.runQuery(internal.ai.threadProvider, { threadId }),
     ]);
@@ -604,7 +613,9 @@ export const moduleChat = action({
       const { content, toolCalls } = await callWithTools(messages, tools, modelKey);
       const actions = toolCalls.map((tc) => ({
         tool: tc.name,
-        args: tc.args,
+        // Inject the trusted challengeId (from the thread) so challenge tools
+        // act on the right challenge without the model needing to know its id.
+        args: challengeId ? { ...(tc.args as Record<string, unknown>), challengeId } : tc.args,
         label: labelFor(tc),
         status: "pending" as const,
       }));
@@ -1080,16 +1091,18 @@ export const cancelAction = mutation({
 // ---- Module thread management ------------------------------------------
 
 export const ensureModuleThread = mutation({
-  args: { module: v.string() },
-  handler: async (ctx, { module }) => {
+  args: { module: v.string(), challengeId: v.optional(v.id("challenges")) },
+  handler: async (ctx, { module, challengeId }) => {
     const userId = await requireUser(ctx);
+    // Challenge coach threads are scoped per challenge via a unique module key.
+    const moduleKey = challengeId ? `challenge:${challengeId}` : module;
     const existing = await ctx.db
       .query("aiThreads")
-      .withIndex("by_module", (q) => q.eq("userId", userId).eq("moduleKey", module))
+      .withIndex("by_module", (q) => q.eq("userId", userId).eq("moduleKey", moduleKey))
       .first();
     if (existing) return existing._id;
     const title = `${module.charAt(0).toUpperCase()}${module.slice(1)} assistant`;
-    return ctx.db.insert("aiThreads", { userId, title, moduleKey: module, provider: "hy3" });
+    return ctx.db.insert("aiThreads", { userId, title, moduleKey, provider: "hy3", challengeId });
   },
 });
 

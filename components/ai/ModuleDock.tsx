@@ -56,9 +56,14 @@ const PROMPTS: Record<string, string[]> = {
     "Log today's blockers: waiting on copy review",
     "How's my energy been trending?",
   ],
+  challenge: [
+    "Log 60 minutes on my Learn block and mark Outreach done",
+    "Check me in: energy 4, mood 4, priority ship the landing page",
+    "Add a milestone: first paying client by day 20",
+  ],
 };
 
-export function ModuleDock({ module }: { module: string }) {
+export function ModuleDock({ module, challengeId }: { module: string; challengeId?: string }) {
   const [open, setOpen] = useState(false);
   const [threadId, setThreadId] = useState<Id<"aiThreads"> | null>(null);
   const [input, setInput] = useState("");
@@ -79,10 +84,12 @@ export function ModuleDock({ module }: { module: string }) {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const cid = challengeId as Id<"challenges"> | undefined;
+
   // Lazily create/find the module thread the first time the dock opens.
   useEffect(() => {
-    if (open && !threadId) void ensureThread({ module }).then(setThreadId);
-  }, [open, threadId, module, ensureThread]);
+    if (open && !threadId) void ensureThread({ module, challengeId: cid }).then(setThreadId);
+  }, [open, threadId, module, cid, ensureThread]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,7 +105,7 @@ export function ModuleDock({ module }: { module: string }) {
     if (!msg || sending) return;
     let id = threadId;
     if (!id) {
-      id = await ensureThread({ module });
+      id = await ensureThread({ module, challengeId: cid });
       setThreadId(id);
       if (model !== "hy3") await setProvider({ threadId: id, provider: model });
     }

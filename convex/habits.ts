@@ -174,7 +174,7 @@ export const update = mutation({
 });
 
 /** Recompute and persist a habit's streak from its completion set. */
-async function refreshStreak(ctx: MutationCtx, id: Id<"habits">) {
+export async function refreshStreak(ctx: MutationCtx, id: Id<"habits">) {
   const completions = await ctx.db
     .query("habitCompletions")
     .withIndex("by_habit", (q) => q.eq("habitId", id))

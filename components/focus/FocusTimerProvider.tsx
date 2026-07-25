@@ -6,6 +6,7 @@ import {
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { FocusMusicLayer } from "./FocusMusicLayer";
 
 type TimerType = "pomodoro" | "stopwatch";
 type Mode = "focus" | "break";
@@ -38,6 +39,9 @@ type Ctx = {
   type: TimerType; mode: Mode; workMin: number; breakMin: number; running: boolean;
   taskId: string; projectId: string; areaId: string; taskTitle: string;
   elapsed: number; left: number; total: number; display: number; active: boolean;
+  /** Bumps each time a fresh focus session begins (from any screen). The music
+   * layer watches this to offer the "play music?" prompt. */
+  startSignal: number;
   toggle: () => void;
   stopAndLog: () => void;
   startFocus: (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string }) => void;
@@ -61,7 +65,11 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   const log = useMutation(api.focus.log);
   const [s, setS] = useState<State>(DEFAULT);
   const [now, setNow] = useState(0);
+  const [startSignal, setStartSignal] = useState(0);
   const hydrated = useRef(false);
+  // mirror of the latest state so callbacks can read it without stale closures
+  const stateRef = useRef(s);
+  stateRef.current = s;
 
   // hydrate from localStorage (survives refresh)
   useEffect(() => {
@@ -138,6 +146,8 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   }, [now, s, logFocus]);
 
   const toggle = useCallback(() => {
+    // starting from a clean idle state counts as a fresh session (offer music)
+    const fresh = !stateRef.current.running && stateRef.current.accumulated === 0;
     setS((p) => {
       if (p.running) {
         const seg = p.segmentStart ? (Date.now() - p.segmentStart) / 1000 : 0;
@@ -145,6 +155,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
       }
       return { ...p, running: true, segmentStart: Date.now() };
     });
+    if (fresh) setStartSignal((n) => n + 1);
   }, []);
 
   const stopAndLog = useCallback(() => {
@@ -176,6 +187,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
           taskTitle: opts.taskTitle ?? "",
         };
       });
+      setStartSignal((n) => n + 1);
     },
     [logFocus],
   );
@@ -193,9 +205,14 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     type: s.type, mode: s.mode, workMin: s.workMin, breakMin: s.breakMin, running: s.running,
     taskId: s.taskId, projectId: s.projectId, areaId: s.areaId, taskTitle: s.taskTitle,
-    elapsed, left, total, display, active,
+    elapsed, left, total, display, active, startSignal,
     toggle, stopAndLog, startFocus, switchType, setMode: setModeFn, setWorkMin, setBreakMin, skipBreak, attribute,
   };
 
-  return <FocusTimerContext.Provider value={value}>{children}</FocusTimerContext.Provider>;
+  return (
+    <FocusTimerContext.Provider value={value}>
+      {children}
+      <FocusMusicLayer />
+    </FocusTimerContext.Provider>
+  );
 }

@@ -18,6 +18,8 @@ const ROUTES: { prefix: string; module: string }[] = [
  * once in the app layout so every module page gets its floating ✦ assistant. */
 export function ModuleDockMount() {
   const pathname = usePathname() ?? "";
+  // Note: the Challenge module (section + day journal) has no AI dock yet —
+  // it will be rebuilt for the new model. No dock on /challenges for now.
   const match = ROUTES.find((r) => pathname.startsWith(r.prefix));
   if (!match) return null;
   // key resets the dock's local state when switching modules.

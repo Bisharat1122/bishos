@@ -48,6 +48,11 @@ export default defineSchema({
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),
     projectId: v.optional(v.id("projects")),
+    // Challenge module links (all optional, additive). A task belongs to a
+    // challenge, one of its sections, and one of its days.
+    challengeId: v.optional(v.id("challenges")),
+    challengeSectionId: v.optional(v.id("challengeSections")),
+    challengeDayId: v.optional(v.id("challengeDays")),
     linkedNoteIds: v.optional(v.array(v.id("notes"))),
     tags: v.optional(v.array(v.string())),
     // Manual ordering within a Kanban column (higher = nearer the top).
@@ -68,6 +73,8 @@ export default defineSchema({
     .index("by_lifeArea", ["lifeAreaId"])
     .index("by_section", ["sectionId"])
     .index("by_project", ["projectId"])
+    .index("by_challenge", ["challengeId"])
+    .index("by_challengeDay", ["challengeDayId"])
     .index("by_status", ["userId", "status"])
     .index("by_dueDate", ["userId", "dueDate"]),
 
@@ -83,6 +90,8 @@ export default defineSchema({
     ),
     lifeAreaId: v.id("lifeAreas"),
     progress: v.number(), // 0-100
+    // A challenge can contain projects (optional, additive).
+    challengeId: v.optional(v.id("challenges")),
     // "standard" (default) or "sprint" (time-boxed). Missing => standard.
     kind: v.optional(v.union(v.literal("standard"), v.literal("sprint"))),
     // sprint-only fields
@@ -120,7 +129,8 @@ export default defineSchema({
     ),
   })
     .index("by_user", ["userId"])
-    .index("by_lifeArea", ["lifeAreaId"]),
+    .index("by_lifeArea", ["lifeAreaId"])
+    .index("by_challenge", ["challengeId"]),
 
   notes: defineTable({
     userId: v.id("users"),
@@ -142,6 +152,7 @@ export default defineSchema({
     linkedNoteIds: v.optional(v.array(v.id("notes"))),
     linkedProjectIds: v.optional(v.array(v.id("projects"))),
     linkedGoalIds: v.optional(v.array(v.id("goals"))),
+    linkedChallengeIds: v.optional(v.array(v.id("challenges"))),
   })
     .index("by_user", ["userId"])
     .index("by_lifeArea", ["lifeAreaId"])
@@ -158,6 +169,7 @@ export default defineSchema({
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),
     projectId: v.optional(v.id("projects")),
+    challengeId: v.optional(v.id("challenges")),
     timeframe: v.union(
       v.literal("weekly"),
       v.literal("monthly"),
@@ -185,7 +197,8 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_lifeArea", ["lifeAreaId"])
-    .index("by_project", ["projectId"]),
+    .index("by_project", ["projectId"])
+    .index("by_challenge", ["challengeId"]),
 
   focusSessions: defineTable({
     userId: v.id("users"),
@@ -196,10 +209,12 @@ export default defineSchema({
     projectId: v.optional(v.id("projects")),
     lifeAreaId: v.optional(v.id("lifeAreas")),
     sectionId: v.optional(v.id("sections")),
+    challengeId: v.optional(v.id("challenges")),
   })
     .index("by_user", ["userId"])
     .index("by_lifeArea", ["lifeAreaId"])
-    .index("by_task", ["taskId"]),
+    .index("by_task", ["taskId"])
+    .index("by_challenge", ["challengeId"]),
 
   habits: defineTable({
     userId: v.id("users"),
@@ -214,11 +229,13 @@ export default defineSchema({
     lifeAreaId: v.id("lifeAreas"),
     sectionId: v.optional(v.id("sections")),
     projectId: v.optional(v.id("projects")), // linked sprint (Command Center)
+    challengeId: v.optional(v.id("challenges")), // linked challenge
     streak: v.number(),
     lastCompletedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_project", ["projectId"]),
+    .index("by_project", ["projectId"])
+    .index("by_challenge", ["challengeId"]),
 
   habitCompletions: defineTable({
     userId: v.id("users"),
@@ -236,6 +253,7 @@ export default defineSchema({
     priorityTaskIds: v.optional(v.array(v.id("tasks"))), // links to the chosen tasks
     blockers: v.array(v.string()),
     adaptiveAnswers: v.optional(v.any()),
+    challengeId: v.optional(v.id("challenges")), // optional challenge scope
   }).index("by_date", ["userId", "date"]),
 
   weeklyReviews: defineTable({
@@ -265,8 +283,11 @@ export default defineSchema({
       ),
     ),
     // Set for the per-module agentic AI windows ("goals" | "tasks" | "notes" …).
-    // Absent on the main /chat thread.
+    // Absent on the main /chat thread. Challenge coach threads use the key
+    // `challenge:<id>` and also set challengeId below.
     moduleKey: v.optional(v.string()),
+    // The specific challenge a challenge-coach thread is scoped to.
+    challengeId: v.optional(v.id("challenges")),
   })
     .index("by_user", ["userId"])
     .index("by_module", ["userId", "moduleKey"]),
@@ -383,6 +404,7 @@ export default defineSchema({
       v.literal("habit"),
       v.literal("lifeArea"),
       v.literal("section"),
+      v.literal("challenge"),
     ),
     itemId: v.string(),
     titleSnapshot: v.string(),
@@ -420,4 +442,116 @@ export default defineSchema({
   pushState: defineTable({
     lastScanAt: v.number(),
   }),
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Challenge module (v2) — a section + day-journal workspace.
+  // A challenge has fixed SECTIONS (each with a syllabus, goals, KPI defs).
+  // DAYS are freeform + named (like ChatGPT sessions). A day holds tasks
+  // (reused global `tasks` tagged with section+day), per-day KPI values, and
+  // per-day habit checks. Tasks & habits reuse the global modules; focus time
+  // rolls up through the task. See specs/2026-07-23-challenge-module.md.
+  // ─────────────────────────────────────────────────────────────────────────
+  challenges: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    status: v.union(v.literal("active"), v.literal("completed"), v.literal("archived")),
+    color: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    primaryLifeAreaId: v.optional(v.id("lifeAreas")),
+    startDate: v.optional(v.number()),
+    order: v.optional(v.number()),
+    pinned: v.optional(v.boolean()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"]),
+
+  challengeSections: defineTable({
+    userId: v.id("users"),
+    challengeId: v.id("challenges"),
+    name: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    order: v.number(),
+    syllabus: v.optional(v.string()), // markdown reference for the section
+  }).index("by_challenge", ["challengeId"]),
+
+  challengeGoals: defineTable({
+    userId: v.id("users"),
+    challengeId: v.id("challenges"),
+    sectionId: v.id("challengeSections"),
+    title: v.string(),
+    done: v.boolean(),
+    order: v.number(),
+  })
+    .index("by_challenge", ["challengeId"])
+    .index("by_section", ["sectionId"]),
+
+  challengeKpiDefs: defineTable({
+    userId: v.id("users"),
+    challengeId: v.id("challenges"),
+    sectionId: v.id("challengeSections"),
+    name: v.string(),
+    type: v.union(v.literal("number"), v.literal("checkbox"), v.literal("text")),
+    unit: v.optional(v.string()),
+    target: v.optional(v.number()), // daily target for number KPIs
+    order: v.number(),
+  })
+    .index("by_challenge", ["challengeId"])
+    .index("by_section", ["sectionId"]),
+
+  challengeDays: defineTable({
+    userId: v.id("users"),
+    challengeId: v.id("challenges"),
+    name: v.string(),
+    date: v.string(), // YYYY-MM-DD (defaults to today, editable)
+    order: v.number(),
+    note: v.optional(v.string()),
+    // End-of-day journaling on the Overview tab.
+    journal: v.optional(
+      v.object({
+        good: v.optional(v.string()),
+        bad: v.optional(v.string()),
+        improve: v.optional(v.string()),
+        lessons: v.optional(v.string()),
+        energy: v.optional(v.number()), // 1-5
+      }),
+    ),
+    // Health tracker fields (per day).
+    health: v.optional(
+      v.object({
+        sleepDuration: v.optional(v.number()), // hours
+        timeAwake: v.optional(v.string()), // clock "HH:MM"
+        timeInBed: v.optional(v.string()), // clock "HH:MM"
+        deepRest: v.optional(v.number()), // Stage 3+ rest, hours
+        perceivedEnergy: v.optional(v.number()), // percent
+        cheatMeal: v.optional(v.boolean()),
+      }),
+    ),
+  }).index("by_challenge", ["challengeId"]),
+
+  challengeKpiValues: defineTable({
+    userId: v.id("users"),
+    challengeId: v.id("challenges"),
+    dayId: v.id("challengeDays"),
+    sectionId: v.id("challengeSections"),
+    kpiDefId: v.id("challengeKpiDefs"),
+    num: v.optional(v.number()),
+    bool: v.optional(v.boolean()),
+    text: v.optional(v.string()),
+  })
+    .index("by_day", ["dayId"])
+    .index("by_kpiDef", ["kpiDefId"])
+    .index("by_challenge", ["challengeId"]),
+
+  challengeDayHabits: defineTable({
+    userId: v.id("users"),
+    challengeId: v.id("challenges"),
+    dayId: v.id("challengeDays"),
+    habitId: v.id("habits"),
+    done: v.boolean(),
+  })
+    .index("by_day", ["dayId"])
+    .index("by_challenge", ["challengeId"]),
 });
