@@ -14,12 +14,24 @@ const tsMin = (ts: number) => {
 import { ChevronLeft, ChevronRight, Plus, CalendarDays, Clock, Target, Gauge } from "lucide-react";
 import { Topbar, StatCard } from "@/components/ui";
 import {
-  startOfDay, startOfWeek, addDays, addMonths, monthMatrix, isSameDay, isToday,
+  startOfDay, addDays, addMonths, isToday,
   WEEKDAYS, fmtMonthYear, fmtRange, fmtDay,
 } from "@/lib/date";
+import { dateOf, mondayOf } from "@/lib/day";
 import { ScheduleBlockModal, ymdLocal } from "@/components/schedule/ScheduleBlockModal";
 import { GapAnalysisCard } from "@/components/schedule/GapAnalysisCard";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
+import { useTz, BLOCK_TYPES } from "@/components/direction/util";
+
+/** Weeks start on Monday, like the rest of the app. */
+const startOfWeek = (d: Date) => dateOf(mondayOf(ymdLocal(d)));
+/** 6×7 Monday-first grid covering the month that contains `d`. */
+const monthMatrix = (d: Date) => {
+  const start = startOfWeek(new Date(d.getFullYear(), d.getMonth(), 1));
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+};
+const WEEKDAYS_MON = [...WEEKDAYS.slice(1), WEEKDAYS[0]];
 
 type View = "day" | "week" | "month";
 const HOUR_PX = 48;
@@ -33,6 +45,7 @@ const minToLabel = (m: number) => {
 
 export default function SchedulePage() {
   const router = useRouter();
+  const tz = useTz();
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [modal, setModal] = useState<
@@ -68,10 +81,12 @@ export default function SchedulePage() {
   const stats = useQuery(api.schedule.analytics, {
     startDate: ymdLocal(analyticsStart),
     endDate: ymdLocal(analyticsEnd),
+    tz,
   });
   const gap = useQuery(api.schedule.gapAnalysis, {
     startDate: ymdLocal(analyticsStart),
     endDate: ymdLocal(analyticsEnd),
+    tz,
   });
 
   // resolve link names/colors
@@ -118,29 +133,29 @@ export default function SchedulePage() {
         action={
           <button
             onClick={() => setModal({ mode: "create", date: ymdLocal(anchor), startMin: 9 * 60 })}
-            className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            className={buttonVariants()}
           >
             <Plus className="h-4 w-4" /> New block
           </button>
         }
       />
-      <div className="px-4 py-6 sm:px-8">
+      <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Schedule</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Time-block your day and link it to tasks, projects, goals & life areas.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex rounded-full border border-border p-0.5 text-sm">
+            <div className="inline-flex items-center rounded-lg bg-muted p-[3px] text-sm text-muted-foreground">
               {(["day", "week", "month"] as View[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
                   className={cn(
-                    "rounded-full px-3 py-1 font-medium capitalize transition",
-                    view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    "rounded-md px-3 py-1 font-medium capitalize transition-colors",
+                    view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {v}
@@ -165,32 +180,34 @@ export default function SchedulePage() {
 
         {/* Nav */}
         <div className="mt-5 flex items-center gap-3">
-          <button onClick={() => shift(-1)} className="rounded-lg border border-border p-1.5 hover:bg-muted"><ChevronLeft className="h-4 w-4" /></button>
-          <button onClick={() => setAnchor(startOfDay(new Date()))} className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted">Today</button>
-          <button onClick={() => shift(1)} className="rounded-lg border border-border p-1.5 hover:bg-muted"><ChevronRight className="h-4 w-4" /></button>
+          <button onClick={() => shift(-1)} className={buttonVariants({ variant: "outline", size: "icon-sm" })}><ChevronLeft className="h-4 w-4" /></button>
+          <button onClick={() => setAnchor(startOfDay(new Date()))} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "text-sm")}>Today</button>
+          <button onClick={() => shift(1)} className={buttonVariants({ variant: "outline", size: "icon-sm" })}><ChevronRight className="h-4 w-4" /></button>
           <span className="ml-1 font-semibold">{title}</span>
         </div>
 
         {/* Calendar body */}
         <div className="mt-4">
-          {view === "month" ? (
-            <MonthGrid
-              days={days}
-              anchor={anchor}
-              byDate={byDate}
-              areaColor={areaColor}
-              onDay={(d) => { setAnchor(d); setView("day"); }}
-              onAdd={(d) => setModal({ mode: "create", date: ymdLocal(d), startMin: 9 * 60 })}
-            />
-          ) : (
-            <Timeline
-              days={days}
-              byDate={byDate}
-              areaColor={areaColor}
-              onSlot={(date, startMin) => setModal({ mode: "create", date, startMin })}
-              onBlock={(b) => setModal({ mode: "edit", block: b })}
-            />
-          )}
+          {/* Called as plain functions (not <Timeline/>): they're declared inside
+              this component, so as JSX elements React would see a brand-new
+              component type every render and remount the whole grid (losing
+              scroll position on every data update). */}
+          {view === "month"
+            ? MonthGrid({
+                days,
+                anchor,
+                byDate,
+                areaColor,
+                onDay: (d) => { setAnchor(d); setView("day"); },
+                onAdd: (d) => setModal({ mode: "create", date: ymdLocal(d), startMin: 9 * 60 }),
+              })
+            : Timeline({
+                days,
+                byDate,
+                areaColor,
+                onSlot: (date, startMin) => setModal({ mode: "create", date, startMin }),
+                onBlock: (b) => setModal({ mode: "edit", block: b }),
+              })}
         </div>
       </div>
 
@@ -215,7 +232,7 @@ export default function SchedulePage() {
   }) {
     const hours = Array.from({ length: 24 }, (_, i) => i);
     return (
-      <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-card">
         {/* header */}
         <div className="flex border-b border-border">
           <div className="w-14 shrink-0" />
@@ -253,15 +270,15 @@ export default function SchedulePage() {
                 {items.map((b) => {
                   const top = (b.startMin / 60) * HOUR_PX;
                   const height = Math.max(18, ((b.endMin - b.startMin) / 60) * HOUR_PX - 2);
-                  const color = areaColor(b.lifeAreaId) ?? b.color;
+                  const color = areaColor(b.lifeAreaId) ?? b.color ?? (b.blockType ? BLOCK_TYPES[b.blockType].color : undefined);
                   return (
                     <button
                       key={b._id}
                       onClick={(e) => { e.stopPropagation(); onBlock(b); }}
                       style={{ top, height, borderLeftColor: color ?? undefined }}
                       className={cn(
-                        "absolute inset-x-1 overflow-hidden rounded-md border-l-[3px] px-1.5 py-0.5 text-left text-[11px] shadow-sm transition hover:brightness-110",
-                        b.status === "done" ? "bg-primary/20" : b.status === "skipped" ? "bg-muted line-through opacity-60" : "bg-sprint/15",
+                        "absolute inset-x-1 overflow-hidden rounded-md border-l-[3px] px-1.5 py-0.5 text-left text-[11px] shadow-sm transition hover:bg-accent",
+                        b.status === "done" ? "bg-success-soft" : b.status === "skipped" ? "bg-muted line-through opacity-60" : "bg-sprint/15",
                       )}
                     >
                       <p className="truncate font-medium">{b.title}</p>
@@ -279,10 +296,10 @@ export default function SchedulePage() {
                   return (
                     <button
                       key={t._id}
-                      onClick={(e) => { e.stopPropagation(); router.push("/tasks"); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/tasks/${t._id}?from=${encodeURIComponent("/schedule")}`); }}
                       style={{ top, height }}
                       className={cn(
-                        "absolute inset-x-1 overflow-hidden rounded-md border border-dashed border-primary/60 bg-primary/10 px-1.5 py-0.5 text-left text-[11px] transition hover:brightness-110",
+                        "absolute inset-x-1 overflow-hidden rounded-md border border-dashed border-primary/60 bg-primary/10 px-1.5 py-0.5 text-left text-[11px] transition hover:bg-accent",
                         t.status === "done" && "line-through opacity-60",
                       )}
                     >
@@ -310,9 +327,9 @@ export default function SchedulePage() {
     onAdd: (d: Date) => void;
   }) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
         <div className="grid grid-cols-7 border-b border-border">
-          {WEEKDAYS.map((w) => (
+          {WEEKDAYS_MON.map((w) => (
             <div key={w} className="px-2 py-2 text-center text-xs font-medium text-muted-foreground">{w}</div>
           ))}
         </div>
@@ -348,7 +365,7 @@ export default function SchedulePage() {
                       style={{ borderLeftColor: areaColor(b.lifeAreaId) ?? b.color ?? undefined }}
                       className={cn(
                         "block w-full truncate rounded border-l-2 px-1 py-0.5 text-left text-[10px]",
-                        b.status === "done" ? "bg-primary/15" : b.status === "skipped" ? "bg-muted line-through opacity-60" : "bg-sprint/10",
+                        b.status === "done" ? "bg-success-soft" : b.status === "skipped" ? "bg-muted line-through opacity-60" : "bg-sprint/10",
                       )}
                     >
                       {minToLabel(b.startMin)} {b.title}
@@ -357,7 +374,7 @@ export default function SchedulePage() {
                   {(taskByDate.get(ds) ?? []).slice(0, 2).map((t) => (
                     <button
                       key={t._id}
-                      onClick={() => router.push("/tasks")}
+                      onClick={() => router.push(`/tasks/${t._id}?from=${encodeURIComponent("/schedule")}`)}
                       className="block w-full truncate rounded border border-dashed border-primary/40 bg-primary/5 px-1 py-0.5 text-left text-[10px]"
                     >
                       {minToLabel(tsMin(t.startAt!))} {t.title}

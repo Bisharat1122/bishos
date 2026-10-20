@@ -25,11 +25,15 @@ import { DetailSkeleton } from "@/components/Skeleton";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToMomentum } from "@/components/momentum/AddToMomentum";
 import { SprintCommandCenter } from "@/components/projects/SprintCommandCenter";
+import { ProjectLinks } from "@/components/projects/ProjectLinks";
+import { TaskDetailPanel } from "@/components/tasks/TaskDetailPanel";
+import { relDay, useToday } from "@/lib/day";
 import { MarkdownLite } from "@/components/tasks/MarkdownLite";
 import { extractPdfText } from "@/lib/pdf";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
+import { toast, errorMessage } from "@/components/os/celebrate";
 
-const STATUS = ["planning", "active", "blocked", "completed"] as const;
 const DAY = 24 * 60 * 60 * 1000;
 
 export default function ProjectPage() {
@@ -39,7 +43,13 @@ export default function ProjectPage() {
 
   const data = useQuery(api.projects.detail, { id });
   const areas = useQuery(api.lifeAreas.list);
-  const update = useMutation(api.projects.update);
+  // Optimistic progress so the slider follows the thumb instead of snapping
+  // back until the server round-trip lands.
+  const update = useMutation(api.projects.update).withOptimisticUpdate((store, args) => {
+    if (args.progress === undefined) return;
+    const cur = store.getQuery(api.projects.detail, { id: args.id });
+    if (cur) store.setQuery(api.projects.detail, { id: args.id }, { ...cur, project: { ...cur.project, progress: args.progress } });
+  });
   const removeProject = useMutation(api.projects.remove);
   const addMilestone = useMutation(api.projects.addMilestone);
   const toggleMilestone = useMutation(api.projects.toggleMilestone);
@@ -53,7 +63,9 @@ export default function ProjectPage() {
   const [ms, setMs] = useState("");
   const [planning, setPlanning] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [openTask, setOpenTask] = useState<Id<"tasks"> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const today = useToday();
 
   if (data === undefined)
     return (
@@ -66,7 +78,7 @@ export default function ProjectPage() {
     return (
       <div>
         <Topbar />
-        <div className="px-8 py-7">
+        <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <EmptyState title="Project not found" />
         </div>
       </div>
@@ -93,7 +105,7 @@ export default function ProjectPage() {
       priority: "med",
       lifeAreaId: project.lifeAreaId,
       projectId: id,
-    });
+    }).catch((e) => toast(errorMessage(e), { tone: "warning" }));
     setTaskTitle("");
   }
 
@@ -108,6 +120,7 @@ export default function ProjectPage() {
         headers: { "Content-Type": file.type },
         body: file,
       });
+      if (!res.ok) throw new Error("Upload failed — try again.");
       const { storageId } = await res.json();
       await update({
         id,
@@ -122,6 +135,8 @@ export default function ProjectPage() {
           },
         ],
       });
+    } catch (e) {
+      toast(errorMessage(e), { tone: "warning" });
     } finally {
       setUploading(false);
     }
@@ -140,7 +155,7 @@ export default function ProjectPage() {
           e.target.value = "";
         }}
       />
-      <div className="px-8 py-7">
+      <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <Breadcrumb
           items={[
             { label: "Projects", href: "/projects" },
@@ -153,7 +168,7 @@ export default function ProjectPage() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               {isSprint && (
-                <span className="flex items-center gap-1 rounded-full bg-sprint/15 px-2.5 py-0.5 text-xs font-semibold text-sprint">
+                <span className="flex items-center gap-1 rounded-md bg-sprint/15 px-2.5 py-0.5 text-xs font-semibold text-sprint">
                   <Zap className="h-3 w-3" /> SPRINT
                 </span>
               )}
@@ -172,22 +187,32 @@ export default function ProjectPage() {
                 e.target.value !== project.title &&
                 update({ id, title: e.target.value.trim() })
               }
-              className="mt-1 w-full bg-transparent text-2xl font-bold tracking-tight outline-none"
+              className="mt-1 w-full bg-transparent text-2xl font-semibold tracking-tight outline-none"
             />
           </div>
           <div className="flex items-center gap-2">
             <AddToMomentum type="project" itemId={id} title={project.title} />
             <button
               onClick={async () => {
-                await removeProject({ id });
-                router.push("/projects");
+                if (!confirm(`Delete “${project.title}”? Its tasks and goals are kept but unlinked.`)) return;
+                try {
+                  await removeProject({ id });
+                  router.push("/projects");
+                } catch (e) {
+                  toast(errorMessage(e), { tone: "warning" });
+                }
               }}
-              className="text-muted-foreground hover:text-warning"
+              title="Delete project"
+              aria-label="Delete project"
+              className="text-muted-foreground hover:text-danger"
             >
               <Trash2 className="h-5 w-5" />
             </button>
           </div>
         </div>
+
+        {/* Life OS: area · status · goal, next action + focus, client links */}
+        <ProjectLinks project={project} />
 
         {/* Sprint hero */}
         {isSprint && (
@@ -195,7 +220,7 @@ export default function ProjectPage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-6">
                 <div>
-                  <div className="text-3xl font-bold text-sprint">
+                  <div className="text-3xl font-semibold text-sprint">
                     {daysLeft != null ? Math.max(0, daysLeft) : "—"}
                   </div>
                   <div className="text-xs text-muted-foreground">days left</div>
@@ -244,7 +269,7 @@ export default function ProjectPage() {
                 defaultValue={project.outcome ?? ""}
                 onBlur={(e) => update({ id, outcome: e.target.value })}
                 placeholder="What does success look like by the end?"
-                className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-sprint/60"
+                className="w-full rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
               />
             </div>
           </Card>
@@ -257,22 +282,6 @@ export default function ProjectPage() {
         {!isSprint && (
           <Card className="mt-5">
             <div className="flex flex-wrap items-center gap-4">
-              <select
-                value={project.status}
-                onChange={(e) =>
-                  void update({
-                    id,
-                    status: e.target.value as (typeof STATUS)[number],
-                  })
-                }
-                className="rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-sm capitalize outline-none"
-              >
-                {STATUS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
               <div className="flex flex-1 items-center gap-2">
                 <span className="text-xs text-muted-foreground">Progress</span>
                 <input
@@ -283,7 +292,7 @@ export default function ProjectPage() {
                   onChange={(e) =>
                     void update({ id, progress: Number(e.target.value) })
                   }
-                  className="flex-1 accent-[hsl(var(--primary))]"
+                  className="flex-1 accent-primary"
                 />
                 <span className="w-9 text-right text-xs font-medium">
                   {project.progress}%
@@ -314,9 +323,9 @@ export default function ProjectPage() {
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
                 placeholder="Add a task…"
-                className="flex-1 rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm outline-none focus:border-primary/60"
+                className="flex-1 rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
               />
-              <button className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
+              <button className={buttonVariants({ variant: "secondary" })}>
                 Add
               </button>
             </form>
@@ -328,8 +337,10 @@ export default function ProjectPage() {
                       void setStatus({
                         id: t._id,
                         status: t.status === "done" ? "not_started" : "done",
-                      })
+                        date: today,
+                      }).catch((e) => toast(errorMessage(e), { tone: "warning" }))
                     }
+                    aria-label={t.status === "done" ? "Mark not done" : "Mark done"}
                     className={cn(
                       "h-4 w-4 shrink-0 rounded-full border-2",
                       t.status === "done"
@@ -337,14 +348,23 @@ export default function ProjectPage() {
                         : "border-muted-foreground",
                     )}
                   />
-                  <span
+                  <button
+                    onClick={() => setOpenTask(t._id)}
                     className={cn(
-                      "text-sm",
+                      "min-w-0 flex-1 truncate text-left text-sm hover:underline",
                       t.status === "done" && "text-muted-foreground line-through",
                     )}
                   >
                     {t.title}
-                  </span>
+                  </button>
+                  {t.status !== "done" && t.plannedFor && (
+                    <span className={cn("shrink-0 rounded-md px-1.5 py-0.5 text-[10px]", t.plannedFor < today ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground")}>
+                      {relDay(t.plannedFor, today)}
+                    </span>
+                  )}
+                  {t.status !== "done" && t.someday && (
+                    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Someday</span>
+                  )}
                 </div>
               ))}
               {tasks.length === 0 && (
@@ -371,7 +391,7 @@ export default function ProjectPage() {
                       className={cn(
                         "flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px]",
                         m.done
-                          ? "border-sprint bg-sprint text-white"
+                          ? "border-primary bg-primary text-primary-foreground"
                           : "border-muted-foreground",
                       )}
                     >
@@ -387,7 +407,7 @@ export default function ProjectPage() {
                     </span>
                     <button
                       onClick={() => void removeMilestone({ id, index: i })}
-                      className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
+                      className="text-muted-foreground opacity-0 transition hover:text-danger group-hover:opacity-100"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -407,9 +427,9 @@ export default function ProjectPage() {
                   value={ms}
                   onChange={(e) => setMs(e.target.value)}
                   placeholder="Add milestone…"
-                  className="flex-1 rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm outline-none focus:border-sprint/60"
+                  className="flex-1 rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
                 />
-                <button className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
+                <button className={buttonVariants({ variant: "secondary" })}>
                   Add
                 </button>
               </form>
@@ -417,16 +437,18 @@ export default function ProjectPage() {
           ) : (
             <Card>
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Target className="h-4 w-4 text-primary" /> Goals ({goals.length})
+                <Target className="h-4 w-4 text-primary" /> Goals filed under this project ({goals.length})
               </h3>
               {goals.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Nothing linked.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {goals.map((g) => (
-                    <li key={g._id} className="rounded-lg bg-muted/30 px-3 py-2 text-sm">
-                      {g.title}{" "}
-                      <span className="text-xs text-muted-foreground">— {g.progress}%</span>
+                    <li key={g._id}>
+                      <Link href={`/goals/${g._id}`} className="block rounded-lg bg-muted/30 px-3 py-2 text-sm hover:bg-muted/60">
+                        {g.title}{" "}
+                        <span className="text-xs text-muted-foreground">— {g.progress}%</span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -454,13 +476,14 @@ export default function ProjectPage() {
                   <AttachmentRow key={a.storageId} att={a} />
                 ))}
                 {notes.map((n) => (
-                  <div
+                  <Link
                     key={n._id}
-                    className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-sm"
+                    href={`/notes/${n._id}`}
+                    className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-sm hover:bg-muted/60"
                   >
                     <StickyNote className="h-4 w-4 text-muted-foreground" />
-                    {n.title}
-                  </div>
+                    {n.title || "Untitled"}
+                  </Link>
                 ))}
                 {attachments.length === 0 && notes.length === 0 && (
                   <p className="text-xs text-muted-foreground">
@@ -483,12 +506,14 @@ export default function ProjectPage() {
                     setPlanning(true);
                     try {
                       await genPlan({ id });
+                    } catch (e) {
+                      toast(errorMessage(e), { tone: "warning" });
                     } finally {
                       setPlanning(false);
                     }
                   }}
                   disabled={planning}
-                  className="rounded-lg bg-sprint px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className={buttonVariants({ size: "sm" })}
                 >
                   {planning ? "Analyzing…" : project.aiPlan ? "Regenerate" : "Analyze & plan"}
                 </button>
@@ -515,8 +540,10 @@ export default function ProjectPage() {
               ) : (
                 <ul className="space-y-1.5">
                   {notes.map((n) => (
-                    <li key={n._id} className="rounded-lg bg-muted/30 px-3 py-2 text-sm">
-                      {n.title}
+                    <li key={n._id}>
+                      <Link href={`/notes/${n._id}`} className="block rounded-lg bg-muted/30 px-3 py-2 text-sm hover:bg-muted/60">
+                        {n.title}
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -525,6 +552,7 @@ export default function ProjectPage() {
           )}
         </div>
       </div>
+      {openTask && <TaskDetailPanel id={openTask} onClose={() => setOpenTask(null)} />}
     </div>
   );
 }
@@ -537,7 +565,7 @@ function AttachmentRow({
   const url = useQuery(api.files.getUrl, { storageId: att.storageId });
   return (
     <a
-      href={url ?? "#"}
+      href={url ?? undefined}
       target="_blank"
       rel="noreferrer"
       className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-sm hover:text-sprint"
@@ -545,7 +573,7 @@ function AttachmentRow({
       <FileText className="h-4 w-4 text-sprint" />
       <span className="flex-1 truncate">{att.name}</span>
       {att.text && (
-        <span className="flex items-center gap-1 rounded-full bg-sprint/15 px-2 py-0.5 text-[10px] text-sprint">
+        <span className="flex items-center gap-1 rounded-md bg-sprint/15 px-2 py-0.5 text-[10px] text-sprint">
           <Sparkles className="h-2.5 w-2.5" /> AI-readable
         </span>
       )}

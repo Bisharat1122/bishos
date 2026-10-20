@@ -43,9 +43,18 @@ export function GapAnalysisCard({
 }) {
   const [open, setOpen] = useState(true);
 
-  if (!data || data.taskCount === 0) {
+  if (data === undefined) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card shadow-card p-5">
+        <Header />
+        <div className="skeleton mt-3 h-20" />
+      </div>
+    );
+  }
+
+  if (data.taskCount === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card shadow-card p-5">
         <Header />
         <div className="mt-3 rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
           Link tasks to your schedule blocks and track focus on them — this card
@@ -60,14 +69,14 @@ export function GapAnalysisCard({
   const over = avgGapMin > 4; // >4 min average → meaningfully over-scheduled
   const under = avgGapMin < -4;
   const verdict = over ? "Over-scheduled" : under ? "Under-scheduled" : "Well calibrated";
-  const verdictCls = over ? "text-warning" : under ? "text-sprint" : "text-primary";
+  const verdictCls = over ? "text-warning" : under ? "text-info" : "text-success";
   const VerdictIcon = over ? TrendingDown : under ? TrendingUp : Gauge;
 
   const max = Math.max(1, ...rows.map((r) => Math.max(r.scheduledMin, r.focusMin)));
   const shown = open ? rows.slice(0, 8) : rows.slice(0, 3);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-xl border border-border bg-card shadow-card p-5">
       <Header />
 
       {/* Headline calibration + totals */}
@@ -76,7 +85,7 @@ export function GapAnalysisCard({
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <VerdictIcon className={cn("h-3.5 w-3.5", verdictCls)} /> Avg gap / task
           </div>
-          <div className={cn("mt-1 text-2xl font-bold tabular-nums", verdictCls)}>
+          <div className={cn("mt-1 text-2xl font-semibold tabular-nums", verdictCls)}>
             {signed(avgGapMin)}
           </div>
           <div className={cn("text-xs font-medium", verdictCls)}>{verdict}</div>
@@ -85,14 +94,14 @@ export function GapAnalysisCard({
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock className="h-3.5 w-3.5" /> Scheduled
           </div>
-          <div className="mt-1 text-2xl font-bold tabular-nums">{fmtDur(totalScheduledMin)}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{fmtDur(totalScheduledMin)}</div>
           <div className="text-xs text-muted-foreground">across {taskCount} task{taskCount === 1 ? "" : "s"}</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/20 p-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Gauge className="h-3.5 w-3.5" /> Real focus
           </div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-primary">{fmtDur(totalFocusMin)}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums text-primary">{fmtDur(totalFocusMin)}</div>
           <div className="text-xs text-muted-foreground">{trackedCount} tracked</div>
         </div>
       </div>
@@ -103,10 +112,10 @@ export function GapAnalysisCard({
           const gOver = r.gapMin > 0;
           const gUnder = r.gapMin < 0;
           const chipCls = gOver
-            ? "bg-warning/15 text-warning"
+            ? "bg-warning-soft text-warning"
             : gUnder
-              ? "bg-sprint/15 text-sprint"
-              : "bg-primary/15 text-primary";
+              ? "bg-info-soft text-info"
+              : "bg-success-soft text-success";
           return (
             <div key={r.taskId}>
               <div className="flex items-center justify-between gap-2">
@@ -118,7 +127,7 @@ export function GapAnalysisCard({
                       .join(" · ")}
                   </p>
                 </div>
-                <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", chipCls)}>
+                <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums", chipCls)}>
                   {signed(r.gapMin)}
                 </span>
               </div>
@@ -145,7 +154,7 @@ export function GapAnalysisCard({
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
         Gap = scheduled − real focus over this {view}.{" "}
         <span className="text-warning">Over</span> means you blocked more than you focused (tighten the block or focus more);{" "}
-        <span className="text-sprint">under</span> means you out-worked the plan (give it more time). Block completions aren&apos;t counted as focus.
+        <span className="text-info">under</span> means you out-worked the plan (give it more time). Block completions aren&apos;t counted as focus.
       </p>
     </div>
   );

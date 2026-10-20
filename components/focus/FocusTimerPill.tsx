@@ -19,17 +19,17 @@ export function FocusTimerPill() {
   return (
     <div
       className={cn(
-        "flex h-10 items-center gap-0.5 rounded-full border pl-1 pr-1",
-        isBreak ? "border-accent/40 bg-accent/10" : "border-primary/40 bg-primary/10",
+        "flex h-9 items-center gap-0.5 rounded-lg border px-1 shadow-xs",
+        isBreak ? "border-success/30 bg-success-soft" : "border-border bg-card",
         t.running && "animate-[pulse_2.5s_ease-in-out_infinite]",
       )}
     >
       <button
         onClick={() => router.push("/focus")}
         title="Open Focus Time"
-        className="flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-medium"
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
       >
-        <Timer className={cn("h-4 w-4", isBreak ? "text-accent" : "text-primary")} />
+        <Timer className={cn("h-4 w-4", isBreak ? "text-success" : "text-foreground")} />
         <span className="tabular-nums">{fmt(t.display)}</span>
         {t.taskTitle && (
           <span className="hidden max-w-[10rem] truncate text-xs text-muted-foreground md:inline">
@@ -40,14 +40,14 @@ export function FocusTimerPill() {
       <button
         onClick={t.toggle}
         title={t.running ? "Pause" : "Resume"}
-        className="flex h-7 w-7 items-center justify-center rounded-full text-foreground hover:bg-muted"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-foreground hover:bg-accent"
       >
         {t.running ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
       </button>
       <button
         onClick={t.stopAndLog}
         title="Stop & log focused time"
-        className="flex h-7 w-7 items-center justify-center rounded-full text-foreground hover:bg-muted"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-foreground hover:bg-accent"
       >
         <Square className="h-3 w-3" />
       </button>

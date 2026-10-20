@@ -6,6 +6,9 @@ import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { Modal } from "@/components/ui";
 import { Copy } from "lucide-react";
+import { toast, errorMessage } from "@/components/os/celebrate";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
 
 const p2 = (n: number) => String(n).padStart(2, "0");
 const dateStrOf = (ts: number) => {
@@ -62,8 +65,11 @@ export function DuplicateTaskModal({
       }
 
       const id = await duplicate({ id: task._id, startAt: newStart, dueDate: newDue });
+      toast("Task duplicated", { tone: "success" });
       onDuplicated?.(id);
       onClose();
+    } catch (err) {
+      toast(errorMessage(err), { tone: "warning" });
     } finally {
       setBusy(false);
     }
@@ -88,14 +94,14 @@ export function DuplicateTaskModal({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-primary/60 [color-scheme:dark]"
+            className="w-full rounded-md border border-input bg-card shadow-xs px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
           />
         </div>
 
         <button
           type="submit"
           disabled={!date || busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          className={cn(buttonVariants({ size: "lg" }), "w-full")}
         >
           <Copy className="h-4 w-4" />
           {busy ? "Duplicating…" : "Duplicate task"}

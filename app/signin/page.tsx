@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import { ConvexError } from "convex/values";
-import { Sparkles } from "lucide-react";
+import { Logo } from "@/components/ui";
+import { buttonVariants, inputClass } from "@/lib/variants";
+import { cn } from "@/lib/utils";
 
 export default function SignInPage() {
   const { signIn } = useAuthActions();
@@ -14,15 +16,10 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="glow-grid flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">bishOS</span>
-        </div>
-        <h1 className="text-lg font-semibold">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-card">
+        <Logo className="mb-6" />
+        <h1 className="text-xl font-semibold tracking-tight">
           {step === "signIn" ? "Welcome back" : "Create your account"}
         </h1>
         <p className="mb-6 mt-1 text-sm text-muted-foreground">
@@ -38,7 +35,7 @@ export default function SignInPage() {
             formData.set("flow", step);
             try {
               await signIn("password", formData);
-              router.push("/dashboard");
+              router.push("/today");
             } catch (err) {
               // Surface the real reason (ConvexError messages reach the client).
               const msg =
@@ -64,7 +61,7 @@ export default function SignInPage() {
             type="email"
             required
             placeholder="Email"
-            className="w-full rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm outline-none focus:border-primary/60"
+            className={cn(inputClass, "h-9 w-full")}
           />
           <input
             name="password"
@@ -72,15 +69,15 @@ export default function SignInPage() {
             required
             minLength={step === "signUp" ? 6 : undefined}
             placeholder="Password"
-            className="w-full rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm outline-none focus:border-primary/60"
+            className={cn(inputClass, "h-9 w-full")}
           />
           {step === "signUp" && (
             <p className="text-xs text-muted-foreground">At least 6 characters.</p>
           )}
-          {error && <p className="text-sm text-warning">{error}</p>}
+          {error && <p role="alert" className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
           <button
             disabled={loading}
-            className="w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className={cn(buttonVariants(), "w-full")}
           >
             {loading ? "…" : step === "signIn" ? "Sign in" : "Create account"}
           </button>

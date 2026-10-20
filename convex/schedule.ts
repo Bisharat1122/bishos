@@ -9,9 +9,14 @@ function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Midnight ms for a YYYY-MM-DD string. */
-function dayMs(dateStr: string): number {
-  return new Date(`${dateStr}T00:00:00`).getTime();
+/**
+ * Local midnight ms for a YYYY-MM-DD string. `tz` = the client's
+ * getTimezoneOffset() (minutes); without it the server's clock (UTC) is used,
+ * which shifts focus logs / analytics windows by the user's UTC offset.
+ */
+function dayMs(dateStr: string, tz?: number): number {
+  if (tz === undefined) return new Date(`${dateStr}T00:00:00`).getTime();
+  return Date.parse(`${dateStr}T00:00:00Z`) + tz * 60_000;
 }
 
 /** Expand a recurring series into the list of occurrence date strings. */
@@ -34,6 +39,14 @@ function expandDates(
   return out;
 }
 
+const blockTypeValidator = v.union(
+  v.literal("maker"),
+  v.literal("manager"),
+  v.literal("admin"),
+  v.literal("routine"),
+  v.literal("free"),
+);
+
 const linkArgs = {
   taskId: v.optional(v.id("tasks")),
   projectId: v.optional(v.id("projects")),
@@ -54,6 +67,7 @@ export const create = mutation({
     recurrence: v.optional(v.union(v.literal("daily"), v.literal("weekly"))),
     weekdays: v.optional(v.array(v.number())),
     untilDate: v.optional(v.string()),
+    blockType: v.optional(blockTypeValidator),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -70,6 +84,7 @@ export const create = mutation({
       sectionId: args.sectionId,
       color: args.color,
       notes: args.notes,
+      blockType: args.blockType,
     };
 
     if (!args.recurrence) {
@@ -110,6 +125,7 @@ export const update = mutation({
     sectionId: v.optional(v.union(v.id("sections"), v.null())),
     color: v.optional(v.string()),
     notes: v.optional(v.string()),
+    blockType: v.optional(v.union(blockTypeValidator, v.null())), // null clears
   },
   handler: async (ctx, { id, ...rest }) => {
     const userId = await requireUser(ctx);
@@ -130,15 +146,16 @@ export const setStatus = mutation({
   args: {
     id: v.id("scheduleBlocks"),
     status: v.union(v.literal("planned"), v.literal("done"), v.literal("skipped")),
+    tz: v.optional(v.number()),
   },
-  handler: async (ctx, { id, status }) => {
+  handler: async (ctx, { id, status, tz }) => {
     const userId = await requireUser(ctx);
     const block = await ctx.db.get(id);
     if (!block || block.userId !== userId) return;
 
     if (status === "done" && !block.focusSessionId) {
-      const start = dayMs(block.date) + block.startMin * 60000;
-      const end = dayMs(block.date) + block.endMin * 60000;
+      const start = dayMs(block.date, tz) + block.startMin * 60000;
+      const end = dayMs(block.date, tz) + block.endMin * 60000;
       const focusSessionId = await ctx.db.insert("focusSessions", {
         userId,
         startTime: start,
@@ -148,6 +165,7 @@ export const setStatus = mutation({
         projectId: block.projectId,
         lifeAreaId: block.lifeAreaId,
         sectionId: block.sectionId,
+        blockType: block.blockType === "maker" || block.blockType === "manager" ? block.blockType : undefined,
       });
       await ctx.db.patch(id, { status, focusSessionId });
       return;
@@ -231,8 +249,8 @@ export const day = query({
  *   gap < 0 → under-scheduled (focused more than you planned)
  */
 export const gapAnalysis = query({
-  args: { startDate: v.string(), endDate: v.string() },
-  handler: async (ctx, { startDate, endDate }) => {
+  args: { startDate: v.string(), endDate: v.string(), tz: v.optional(v.number()) },
+  handler: async (ctx, { startDate, endDate, tz }) => {
     const userId = await requireUser(ctx);
     const [blocks, allBlocks, focus, tasks, areas] = await Promise.all([
       ctx.db
@@ -247,8 +265,8 @@ export const gapAnalysis = query({
       ctx.db.query("lifeAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
     ]);
 
-    const windowStart = dayMs(startDate);
-    const windowEnd = dayMs(endDate) + DAY;
+    const windowStart = dayMs(startDate, tz);
+    const windowEnd = dayMs(endDate, tz) + DAY;
 
     // Sessions created by marking a block "done" are planning artifacts, not
     // real tracked focus — exclude them so the gap is honest.
@@ -321,8 +339,8 @@ export const gapAnalysis = query({
 /** Adherence + planned-vs-actual hours over a date window (for analytics cards
  * and the weekly review). */
 export const analytics = query({
-  args: { startDate: v.string(), endDate: v.string() },
-  handler: async (ctx, { startDate, endDate }) => {
+  args: { startDate: v.string(), endDate: v.string(), tz: v.optional(v.number()) },
+  handler: async (ctx, { startDate, endDate, tz }) => {
     const userId = await requireUser(ctx);
     const [blocks, areas, focus] = await Promise.all([
       ctx.db
@@ -336,8 +354,8 @@ export const analytics = query({
     ]);
 
     const areaName = (id?: string) => areas.find((a) => a._id === id)?.name ?? "Unassigned";
-    const windowStart = dayMs(startDate);
-    const windowEnd = dayMs(endDate) + DAY;
+    const windowStart = dayMs(startDate, tz);
+    const windowEnd = dayMs(endDate, tz) + DAY;
 
     let scheduledMin = 0;
     let done = 0;

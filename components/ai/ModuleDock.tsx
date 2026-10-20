@@ -10,6 +10,7 @@ import {
 import { MarkdownLite } from "@/components/tasks/MarkdownLite";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AiDots } from "@/components/Skeleton";
+import { toast, errorMessage } from "@/components/os/celebrate";
 import { cn } from "@/lib/utils";
 
 type ModelKey = "gpt-oss" | "owl" | "openrouter" | "hy3";
@@ -81,6 +82,11 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
     api.aiThreads.messages,
     threadId ? { threadId } : "skip",
   );
+  // Show the thread's real stored model (older threads were created with gpt-oss).
+  const storedModel = useQuery(api.aiThreads.provider, threadId ? { threadId } : "skip");
+  useEffect(() => {
+    if (storedModel && storedModel !== "perplexity") setModel(storedModel);
+  }, [storedModel]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +94,7 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
 
   // Lazily create/find the module thread the first time the dock opens.
   useEffect(() => {
-    if (open && !threadId) void ensureThread({ module, challengeId: cid }).then(setThreadId);
+    if (open && !threadId) void ensureThread({ module, challengeId: cid }).then(setThreadId).catch(() => {});
   }, [open, threadId, module, cid, ensureThread]);
 
   useEffect(() => {
@@ -97,22 +103,26 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
 
   function chooseModel(p: ModelKey) {
     setModel(p);
-    if (threadId) void setProvider({ threadId, provider: p });
+    if (threadId) void setProvider({ threadId, provider: p }).catch(() => {});
   }
 
   async function send(text?: string) {
     const msg = (text ?? input).trim();
     if (!msg || sending) return;
-    let id = threadId;
-    if (!id) {
-      id = await ensureThread({ module, challengeId: cid });
-      setThreadId(id);
-      if (model !== "hy3") await setProvider({ threadId: id, provider: model });
-    }
     setInput("");
     setSending(true);
     try {
+      let id = threadId;
+      if (!id) {
+        id = await ensureThread({ module, challengeId: cid });
+        setThreadId(id);
+        if (model !== "hy3") await setProvider({ threadId: id, provider: model });
+      }
       await moduleChat({ threadId: id, module, message: msg });
+    } catch (e) {
+      // Give the message back so it isn't lost.
+      if (!text) setInput((cur) => cur || msg);
+      toast(errorMessage(e, "The assistant couldn't reply. Try again."), { tone: "warning" });
     } finally {
       setSending(false);
     }
@@ -127,14 +137,14 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
         <button
           onClick={() => setOpen(true)}
           title={`${module} assistant`}
-          className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-105"
+          className="fixed bottom-24 right-5 z-40 flex h-12 w-12 lg:bottom-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-raised transition hover:scale-105"
         >
           <Sparkles className="h-5 w-5" />
         </button>
       )}
 
       {open && (
-        <div className="fixed bottom-5 right-5 z-40 flex h-[560px] w-[min(380px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+        <div className="fixed bottom-24 right-5 z-40 flex h-[min(560px,calc(100dvh-8rem))] lg:bottom-5 w-[min(380px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-raised">
           {/* Header */}
           <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
             <Sparkles className="h-4 w-4 text-primary" />
@@ -142,16 +152,18 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
             <div className="ml-auto flex items-center gap-1">
               {!empty && (
                 <button
-                  onClick={() => threadId && void clearThread({ threadId })}
+                  onClick={() => {
+                    if (threadId && confirm("Clear this conversation?")) void clearThread({ threadId }).catch(() => {});
+                  }}
                   title="Clear conversation"
-                  className="rounded p-1 text-muted-foreground hover:text-foreground"
+                  className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}
               <button
                 onClick={() => setOpen(false)}
-                className="rounded p-1 text-muted-foreground hover:text-foreground"
+                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -166,7 +178,7 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
                 onClick={() => chooseModel(m.key)}
                 title={`${m.label} — free, can take actions`}
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[11px] font-medium transition",
+                  "rounded-md px-2 py-0.5 text-[11px] font-medium transition",
                   model === m.key
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:text-foreground",
@@ -188,7 +200,7 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
                   <button
                     key={p}
                     onClick={() => void send(p)}
-                    className="block w-full rounded-lg border border-border px-2.5 py-1.5 text-left text-xs text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                    className="block w-full rounded-lg border border-border px-2.5 py-1.5 text-left text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
                   >
                     {p}
                   </button>
@@ -219,8 +231,12 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
                       label={a.label}
                       status={a.status}
                       result={a.result}
-                      onConfirm={() => void confirmAction({ messageId: m._id, index: i })}
-                      onCancel={() => void cancelAction({ messageId: m._id, index: i })}
+                      onConfirm={() =>
+                        void confirmAction({ messageId: m._id, index: i }).catch((e) =>
+                          toast(errorMessage(e, "Couldn't apply that action."), { tone: "warning" }),
+                        )
+                      }
+                      onCancel={() => void cancelAction({ messageId: m._id, index: i }).catch(() => {})}
                     />
                   ))}
                 </div>
@@ -237,7 +253,7 @@ export function ModuleDock({ module, challengeId }: { module: string; challengeI
 
           {/* Composer */}
           <div className="border-t border-border p-2">
-            <div className="flex items-end gap-2 rounded-xl border border-border bg-background px-2 py-1.5">
+            <div className="flex items-end gap-2 rounded-xl border border-input bg-card px-2 py-1.5 shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30">
               <AutoGrowTextarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -287,8 +303,8 @@ function ActionCard({
       className={cn(
         "mt-2 rounded-lg border px-2.5 py-2 text-xs",
         status === "pending" && "border-primary/40 bg-primary/5",
-        status === "done" && "border-primary/30 bg-primary/5",
-        status === "failed" && "border-destructive/40 bg-destructive/5",
+        status === "done" && "border-success/30 bg-success-soft",
+        status === "failed" && "border-danger/30 bg-danger-soft",
         status === "cancelled" && "border-border bg-muted/30 opacity-70",
       )}
     >
@@ -301,25 +317,25 @@ function ActionCard({
         <div className="mt-2 flex gap-2">
           <button
             onClick={onConfirm}
-            className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground transition hover:opacity-90"
+            className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground transition hover:bg-primary/90"
           >
             <Check className="h-3.5 w-3.5" /> Confirm
           </button>
           <button
             onClick={onCancel}
-            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground transition hover:text-foreground"
+            className="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
             <Ban className="h-3.5 w-3.5" /> Cancel
           </button>
         </div>
       )}
       {status === "done" && (
-        <p className="mt-1.5 flex items-center gap-1 text-primary">
+        <p className="mt-1.5 flex items-center gap-1 text-success">
           <Check className="h-3.5 w-3.5" /> {result ?? "Done"}
         </p>
       )}
       {status === "failed" && (
-        <p className="mt-1.5 flex items-center gap-1 text-destructive">
+        <p className="mt-1.5 flex items-center gap-1 text-danger">
           <Ban className="h-3.5 w-3.5" /> {result ?? "Failed"}
         </p>
       )}

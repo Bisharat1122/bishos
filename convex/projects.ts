@@ -1,7 +1,9 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { query, mutation, action } from "./_generated/server";
 import { api } from "./_generated/api";
+import { Doc, Id } from "./_generated/dataModel";
 import { requireUser } from "./helpers";
+import { getSettings } from "./os";
 import { callOpenRouter } from "./openrouter";
 import { computeStreak, computeBestStreak } from "./habits";
 
@@ -70,6 +72,183 @@ export const detail = query({
   },
 });
 
+const PRANK = { high: 0, med: 1, low: 2 } as const;
+
+/**
+ * GTD "next action": the open task to do next — in progress first, then the
+ * earliest "when" day, then priority, then manual order.
+ */
+function pickNextAction(open: Doc<"tasks">[]): Doc<"tasks"> | null {
+  if (!open.length) return null;
+  return [...open].sort(
+    (a, b) =>
+      Number(b.status === "in_progress") - Number(a.status === "in_progress") ||
+      (a.plannedFor ?? "9999").localeCompare(b.plannedFor ?? "9999") ||
+      Number(!!a.someday) - Number(!!b.someday) ||
+      PRANK[a.priority] - PRANK[b.priority] ||
+      (b.order ?? b._creationTime) - (a.order ?? a._creationTime),
+  )[0];
+}
+
+const lite = (t: Doc<"tasks">) => ({
+  _id: t._id,
+  title: t.title,
+  status: t.status,
+  plannedFor: t.plannedFor ?? null,
+  someday: !!t.someday,
+  estimateMin: t.estimateMin ?? null,
+  energy: t.energy ?? null,
+  lifeAreaId: t.lifeAreaId,
+  projectId: t.projectId ?? null,
+});
+
+/** Goals a project can serve, 12-week first (active, not achieved/dropped). */
+function goalOptionsOf(goals: Doc<"goals">[]) {
+  const rank = (g: Doc<"goals">) => (g.level === "cycle" ? 0 : g.level === "annual" ? 1 : 2);
+  return goals
+    .filter((g) => g.goalStatus !== "dropped")
+    .sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title))
+    .map((g) => ({
+      _id: g._id,
+      title: g.title,
+      level: g.level ?? null,
+      goalStatus: g.goalStatus ?? null,
+      lifeAreaId: g.lifeAreaId,
+    }));
+}
+
+/**
+ * Projects screen aggregate: every project with its Life Area, goal, deal /
+ * company, task counts, next action and focus minutes this week, plus the
+ * goal options and the WIP cap. `weekStartMs`/`weekEndMs` = local Monday
+ * midnight → next Monday midnight.
+ */
+export const board = query({
+  args: { weekStartMs: v.number(), weekEndMs: v.number() },
+  handler: async (ctx, { weekStartMs, weekEndMs }) => {
+    const userId = await requireUser(ctx);
+    const [projects, tasks, areas, goals, deals, companies, settings, sessions] = await Promise.all([
+      ctx.db.query("projects").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("lifeAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("goals").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("deals").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("companies").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      getSettings(ctx, userId),
+      ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").take(1500),
+    ]);
+    const taskProject = new Map<string, string>();
+    for (const t of tasks) if (t.projectId) taskProject.set(t._id, t.projectId);
+    const focusWeek = new Map<string, number>();
+    for (const s of sessions) {
+      if (s.endTime < weekStartMs || s.endTime >= weekEndMs) continue;
+      const pid = s.projectId ?? (s.taskId ? taskProject.get(s.taskId) : undefined);
+      if (pid) focusWeek.set(pid, (focusWeek.get(pid) ?? 0) + s.duration);
+    }
+    const byId = <T extends { _id: string }>(rows: T[]) => new Map(rows.map((r) => [r._id as string, r]));
+    const areaMap = byId(areas);
+    const goalMap = byId(goals);
+    const dealMap = byId(deals);
+    const companyMap = byId(companies);
+
+    const rows = projects.map((p) => {
+      const pt = tasks.filter((t) => t.projectId === p._id);
+      const open = pt.filter((t) => t.status !== "done");
+      const next = pickNextAction(open);
+      const area = areaMap.get(p.lifeAreaId);
+      const goal = p.goalId ? goalMap.get(p.goalId) : undefined;
+      const deal = p.dealId ? dealMap.get(p.dealId) : undefined;
+      const company = p.companyId ? companyMap.get(p.companyId) : deal?.companyId ? companyMap.get(deal.companyId) : undefined;
+      return {
+        _id: p._id,
+        title: p.title,
+        status: p.status,
+        kind: p.kind ?? "standard",
+        progress: p.progress,
+        endDate: p.endDate ?? null,
+        durationDays: p.durationDays ?? null,
+        lifeAreaId: p.lifeAreaId,
+        area: area ? { _id: area._id, name: area.name, color: area.color, order: area.order } : null,
+        goal: goal ? { _id: goal._id, title: goal.title, level: goal.level ?? null } : null,
+        deal: deal ? { _id: deal._id, title: deal.title, stage: deal.stage } : null,
+        company: company ? { _id: company._id, name: company.name } : null,
+        taskTotal: pt.length,
+        taskDone: pt.length - open.length,
+        openCount: open.length,
+        nextAction: next ? lite(next) : null,
+        focusWeekMin: Math.round((focusWeek.get(p._id) ?? 0) / 60),
+      };
+    });
+    return {
+      projects: rows,
+      maxActiveProjects: settings.maxActiveProjects,
+      goals: goalOptionsOf(goals),
+      areas: areas
+        .filter((a) => !a.archived)
+        .sort((a, b) => a.order - b.order)
+        .map((a) => ({ _id: a._id, name: a.name, color: a.color, order: a.order })),
+    };
+  },
+});
+
+/**
+ * Project detail — Life OS links: goal, deal/company, next action + open
+ * tasks, focus this week/total, and the option lists for the link pickers.
+ */
+export const links = query({
+  args: { id: v.id("projects"), weekStartMs: v.number(), weekEndMs: v.number() },
+  handler: async (ctx, { id, weekStartMs, weekEndMs }) => {
+    const userId = await requireUser(ctx);
+    const project = await ctx.db.get(id);
+    if (!project || project.userId !== userId) return null;
+    const [tasks, goals, deals, companies, sessions] = await Promise.all([
+      ctx.db.query("tasks").withIndex("by_project", (q) => q.eq("projectId", id)).collect(),
+      ctx.db.query("goals").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("deals").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("companies").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").take(3000),
+    ]);
+    const mine = tasks.filter((t) => t.userId === userId);
+    const open = mine.filter((t) => t.status !== "done");
+    const next = pickNextAction(open);
+    const taskIds = new Set<string>(mine.map((t) => t._id));
+    let weekSec = 0;
+    let totalSec = 0;
+    let makerWeekSec = 0;
+    for (const s of sessions) {
+      if (s.projectId !== id && !(s.taskId && taskIds.has(s.taskId))) continue;
+      totalSec += s.duration;
+      if (s.endTime >= weekStartMs && s.endTime < weekEndMs) {
+        weekSec += s.duration;
+        if (s.blockType === "maker") makerWeekSec += s.duration;
+      }
+    }
+    const goal = project.goalId ? goals.find((g) => g._id === project.goalId) : undefined;
+    const deal = project.dealId ? deals.find((d) => d._id === project.dealId) : undefined;
+    const companyId = project.companyId ?? deal?.companyId;
+    const company = companyId ? companies.find((c) => c._id === companyId) : undefined;
+    const OPEN = new Set(["target", "contacted", "booked", "discovery", "proposal", "verbal", "won"]);
+    return {
+      goal: goal
+        ? { _id: goal._id, title: goal.title, level: goal.level ?? null, progress: goal.progress, goalStatus: goal.goalStatus ?? null }
+        : null,
+      deal: deal ? { _id: deal._id, title: deal.title, stage: deal.stage, value: deal.value ?? null } : null,
+      company: company ? { _id: company._id, name: company.name, relationship: company.relationship } : null,
+      nextAction: next ? lite(next) : null,
+      openTasks: open.length,
+      focus: { weekMin: Math.round(weekSec / 60), totalMin: Math.round(totalSec / 60), makerWeekMin: Math.round(makerWeekSec / 60) },
+      goalOptions: goalOptionsOf(goals),
+      dealOptions: deals
+        .filter((d) => OPEN.has(d.stage) || d._id === project.dealId)
+        .sort((a, b) => Number(b.stage === "won") - Number(a.stage === "won") || a.title.localeCompare(b.title))
+        .map((d) => ({ _id: d._id, title: d.title, stage: d.stage, companyId: d.companyId ?? null })),
+      companyOptions: companies
+        .sort((a, b) => Number(b.relationship === "customer") - Number(a.relationship === "customer") || a.name.localeCompare(b.name))
+        .map((c) => ({ _id: c._id, name: c.name, relationship: c.relationship })),
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     title: v.string(),
@@ -81,9 +260,16 @@ export const create = mutation({
     outcome: v.optional(v.string()),
     startDate: v.optional(v.number()),
     durationDays: v.optional(v.number()),
+    // Life OS: the goal this project serves (optional, ≤1).
+    goalId: v.optional(v.id("goals")),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
+    for (const ref of [args.lifeAreaId, args.goalId]) {
+      if (!ref) continue;
+      const doc = (await ctx.db.get(ref)) as { userId?: Id<"users"> } | null;
+      if (!doc || doc.userId !== userId) throw new ConvexError("Linked item not found.");
+    }
     const isSprint = args.kind === "sprint";
     const start = args.startDate ?? Date.now();
     return ctx.db.insert("projects", {
@@ -91,6 +277,7 @@ export const create = mutation({
       title: args.title,
       description: args.description,
       lifeAreaId: args.lifeAreaId,
+      goalId: args.goalId,
       status: args.status ?? (isSprint ? "active" : "planning"),
       progress: 0,
       kind: args.kind ?? "standard",
@@ -118,10 +305,24 @@ export const update = mutation({
     attachments: v.optional(v.array(attachmentValidator)),
     aiPlan: v.optional(v.string()),
     areaIds: v.optional(v.array(v.id("lifeAreas"))),
+    // Life OS links (null clears): ≤1 goal; client delivery → deal/company.
+    goalId: v.optional(v.union(v.id("goals"), v.null())),
+    dealId: v.optional(v.union(v.id("deals"), v.null())),
+    companyId: v.optional(v.union(v.id("companies"), v.null())),
   },
-  handler: async (ctx, { id, ...rest }) => {
-    await requireUser(ctx);
+  handler: async (ctx, { id, goalId, dealId, companyId, ...rest }) => {
+    const userId = await requireUser(ctx);
+    const project = await ctx.db.get(id);
+    if (!project || project.userId !== userId) throw new ConvexError("Project not found.");
+    for (const ref of [rest.lifeAreaId, goalId, dealId, companyId]) {
+      if (!ref) continue;
+      const doc = (await ctx.db.get(ref)) as { userId?: Id<"users"> } | null;
+      if (!doc || doc.userId !== userId) throw new ConvexError("Linked item not found.");
+    }
     const patch: Record<string, unknown> = { ...rest };
+    if (goalId !== undefined) patch.goalId = goalId ?? undefined;
+    if (dealId !== undefined) patch.dealId = dealId ?? undefined;
+    if (companyId !== undefined) patch.companyId = companyId ?? undefined;
     // keep endDate consistent when duration/start change
     if (rest.startDate !== undefined || rest.durationDays !== undefined) {
       const cur = await ctx.db.get(id);
@@ -136,9 +337,9 @@ export const update = mutation({
 export const addMilestone = mutation({
   args: { id: v.id("projects"), text: v.string() },
   handler: async (ctx, { id, text }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
     const p = await ctx.db.get(id);
-    if (!p) return;
+    if (!p || p.userId !== userId) return;
     const milestones = [...(p.milestones ?? []), { text, done: false }];
     await ctx.db.patch(id, { milestones, progress: computeProgress(milestones) });
   },
@@ -147,9 +348,9 @@ export const addMilestone = mutation({
 export const toggleMilestone = mutation({
   args: { id: v.id("projects"), index: v.number() },
   handler: async (ctx, { id, index }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
     const p = await ctx.db.get(id);
-    if (!p || !p.milestones?.[index]) return;
+    if (!p || p.userId !== userId || !p.milestones?.[index]) return;
     const milestones = p.milestones.map((m, i) =>
       i === index ? { ...m, done: !m.done } : m,
     );
@@ -160,9 +361,9 @@ export const toggleMilestone = mutation({
 export const removeMilestone = mutation({
   args: { id: v.id("projects"), index: v.number() },
   handler: async (ctx, { id, index }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
     const p = await ctx.db.get(id);
-    if (!p) return;
+    if (!p || p.userId !== userId) return;
     const milestones = (p.milestones ?? []).filter((_, i) => i !== index);
     await ctx.db.patch(id, { milestones, progress: computeProgress(milestones) });
   },
@@ -171,7 +372,9 @@ export const removeMilestone = mutation({
 export const remove = mutation({
   args: { id: v.id("projects") },
   handler: async (ctx, { id }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    const project = await ctx.db.get(id);
+    if (!project || project.userId !== userId) return;
     const tasks = await ctx.db.query("tasks").withIndex("by_project", (q) => q.eq("projectId", id)).collect();
     for (const t of tasks) await ctx.db.patch(t._id, { projectId: undefined });
     const goals = await ctx.db.query("goals").withIndex("by_project", (q) => q.eq("projectId", id)).collect();

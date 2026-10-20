@@ -10,6 +10,8 @@ import { FocusMusicLayer } from "./FocusMusicLayer";
 
 type TimerType = "pomodoro" | "stopwatch";
 type Mode = "focus" | "break";
+/** Life OS: deep "maker" work vs shallow "manager" work ("" = not marked). */
+export type BlockType = "maker" | "manager" | "";
 
 type State = {
   type: TimerType;
@@ -23,28 +25,30 @@ type State = {
   projectId: string;
   areaId: string;
   taskTitle: string;
+  blockType: BlockType;
 };
 
 const DEFAULT: State = {
   type: "pomodoro", mode: "focus", workMin: 25, breakMin: 5,
   running: false, accumulated: 0, segmentStart: null,
-  taskId: "", projectId: "", areaId: "", taskTitle: "",
+  taskId: "", projectId: "", areaId: "", taskTitle: "", blockType: "",
 };
 
 const KEY = "bishos.focusTimer.v1";
 
-type Attribution = Partial<Pick<State, "taskId" | "projectId" | "areaId" | "taskTitle">>;
+type Attribution = Partial<Pick<State, "taskId" | "projectId" | "areaId" | "taskTitle" | "blockType">>;
 
 type Ctx = {
   type: TimerType; mode: Mode; workMin: number; breakMin: number; running: boolean;
-  taskId: string; projectId: string; areaId: string; taskTitle: string;
+  taskId: string; projectId: string; areaId: string; taskTitle: string; blockType: BlockType;
   elapsed: number; left: number; total: number; display: number; active: boolean;
   /** Bumps each time a fresh focus session begins (from any screen). The music
    * layer watches this to offer the "play music?" prompt. */
   startSignal: number;
   toggle: () => void;
   stopAndLog: () => void;
-  startFocus: (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string }) => void;
+  startFocus: (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string; blockType?: BlockType }) => void;
+  setBlockType: (b: BlockType) => void;
   switchType: (t: TimerType) => void;
   setMode: (m: Mode) => void;
   setWorkMin: (n: number) => void;
@@ -114,22 +118,35 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   const display = s.type === "stopwatch" ? elapsed : left;
   const active = s.running || s.accumulated > 0;
 
+  // Logs under the CURRENT attribution (read from the ref, so callers can run
+  // it before a state change without stale closures).
   const logFocus = useCallback(
     (seconds: number) => {
       const sec = Math.round(seconds);
       if (sec < 30) return;
+      const a = stateRef.current;
       const end = Date.now();
-      void log({
+      log({
         startTime: end - sec * 1000,
         endTime: end,
         duration: sec,
-        taskId: s.taskId ? (s.taskId as Id<"tasks">) : undefined,
-        projectId: s.projectId ? (s.projectId as Id<"projects">) : undefined,
-        lifeAreaId: s.areaId ? (s.areaId as Id<"lifeAreas">) : undefined,
+        taskId: a.taskId ? (a.taskId as Id<"tasks">) : undefined,
+        projectId: a.projectId ? (a.projectId as Id<"projects">) : undefined,
+        lifeAreaId: a.areaId ? (a.areaId as Id<"lifeAreas">) : undefined,
+        blockType: a.blockType || undefined,
+      }).catch(() => {
+        /* a failed log must never break the timer */
       });
     },
-    [log, s.taskId, s.projectId, s.areaId],
+    [log],
   );
+
+  /** Seconds focused in the current segment (incl. the running part). */
+  const focusedNow = () => {
+    const p = stateRef.current;
+    const seg = p.running && p.segmentStart ? (Date.now() - p.segmentStart) / 1000 : 0;
+    return { p, acc: p.accumulated + seg };
+  };
 
   // pomodoro block transition when the countdown reaches zero
   useEffect(() => {
@@ -158,22 +175,21 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     if (fresh) setStartSignal((n) => n + 1);
   }, []);
 
+  // Side effects (logging) run OUTSIDE the state updaters — React may call an
+  // updater twice (StrictMode / concurrent rebase), which double-logged time.
   const stopAndLog = useCallback(() => {
-    setS((p) => {
-      const seg = p.running && p.segmentStart ? (Date.now() - p.segmentStart) / 1000 : 0;
-      const acc = p.accumulated + seg;
-      if (p.type === "stopwatch" || p.mode === "focus") logFocus(acc);
-      return { ...p, running: false, accumulated: 0, segmentStart: null, mode: "focus" };
-    });
+    const { p, acc } = focusedNow();
+    if (p.type === "stopwatch" || p.mode === "focus") logFocus(acc);
+    setS((prev) => ({ ...prev, running: false, accumulated: 0, segmentStart: null, mode: "focus" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logFocus]);
 
   const startFocus = useCallback(
-    (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string }) => {
+    (opts: { type: TimerType; taskId?: string; projectId?: string; areaId?: string; taskTitle?: string; blockType?: BlockType }) => {
+      // log any in-progress focus time under the PREVIOUS attribution first
+      const { p: cur, acc } = focusedNow();
+      if (cur.type === "stopwatch" || cur.mode === "focus") logFocus(acc);
       setS((p) => {
-        // log any in-progress focus time under the PREVIOUS attribution first
-        const seg = p.running && p.segmentStart ? (Date.now() - p.segmentStart) / 1000 : 0;
-        const acc = p.accumulated + seg;
-        if (p.type === "stopwatch" || p.mode === "focus") logFocus(acc);
         return {
           ...p,
           type: opts.type,
@@ -185,28 +201,42 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
           projectId: opts.projectId ?? "",
           areaId: opts.areaId ?? "",
           taskTitle: opts.taskTitle ?? "",
+          // Keep the last deep/shallow choice unless the caller knows better.
+          blockType: opts.blockType ?? p.blockType ?? "",
         };
       });
       setStartSignal((n) => n + 1);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [logFocus],
   );
 
-  const switchType = useCallback((t: TimerType) =>
-    setS((p) => ({ ...p, type: t, running: false, mode: "focus", accumulated: 0, segmentStart: null })), []);
-  const setModeFn = useCallback((m: Mode) =>
-    setS((p) => ({ ...p, mode: m, running: false, accumulated: 0, segmentStart: null })), []);
+  /** Before a switch resets the clock, keep any real focus time (≥ 1 min). */
+  const logBeforeReset = useCallback(() => {
+    const { p, acc } = focusedNow();
+    if ((p.type === "stopwatch" || p.mode === "focus") && acc >= 60) logFocus(acc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logFocus]);
+  const switchType = useCallback((t: TimerType) => {
+    logBeforeReset();
+    setS((p) => ({ ...p, type: t, running: false, mode: "focus", accumulated: 0, segmentStart: null }));
+  }, [logBeforeReset]);
+  const setModeFn = useCallback((m: Mode) => {
+    logBeforeReset();
+    setS((p) => ({ ...p, mode: m, running: false, accumulated: 0, segmentStart: null }));
+  }, [logBeforeReset]);
   const setWorkMin = useCallback((n: number) => setS((p) => ({ ...p, workMin: Math.max(1, n) })), []);
   const setBreakMin = useCallback((n: number) => setS((p) => ({ ...p, breakMin: Math.max(1, n) })), []);
   const skipBreak = useCallback(() =>
     setS((p) => ({ ...p, mode: "focus", running: false, accumulated: 0, segmentStart: null })), []);
   const attribute = useCallback((a: Attribution) => setS((p) => ({ ...p, ...a })), []);
+  const setBlockType = useCallback((b: BlockType) => setS((p) => ({ ...p, blockType: b })), []);
 
   const value: Ctx = {
     type: s.type, mode: s.mode, workMin: s.workMin, breakMin: s.breakMin, running: s.running,
-    taskId: s.taskId, projectId: s.projectId, areaId: s.areaId, taskTitle: s.taskTitle,
+    taskId: s.taskId, projectId: s.projectId, areaId: s.areaId, taskTitle: s.taskTitle, blockType: s.blockType ?? "",
     elapsed, left, total, display, active, startSignal,
-    toggle, stopAndLog, startFocus, switchType, setMode: setModeFn, setWorkMin, setBreakMin, skipBreak, attribute,
+    toggle, stopAndLog, startFocus, setBlockType, switchType, setMode: setModeFn, setWorkMin, setBreakMin, skipBreak, attribute,
   };
 
   return (

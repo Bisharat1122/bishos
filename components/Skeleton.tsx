@@ -7,7 +7,7 @@ export function Skeleton({ className }: { className?: string }) {
 /** A card-shaped placeholder with a few shimmer lines. */
 export function CardSkeleton({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
-    <div className={cn("rounded-2xl border border-border bg-card p-5", className)}>
+    <div className={cn("rounded-xl border border-border bg-card shadow-card p-5", className)}>
       <Skeleton className="mb-3 h-5 w-1/3" />
       {Array.from({ length: lines }).map((_, i) => (
         <Skeleton key={i} className={cn("mb-2 h-3", i % 2 ? "w-2/3" : "w-full")} />
@@ -49,7 +49,7 @@ export function AiDots({ className }: { className?: string }) {
 
 export function DetailSkeleton() {
   return (
-    <div className="px-4 py-7 sm:px-8">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <Skeleton className="h-3.5 w-40" />
       <Skeleton className="mt-3 h-8 w-1/2" />
       <div className="mt-6 grid gap-4 md:grid-cols-2">

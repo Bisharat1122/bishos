@@ -1,8 +1,11 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireUser } from "./helpers";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Deep "maker" work vs shallow "manager" work (Life OS). */
+const blockTypeValidator = v.union(v.literal("maker"), v.literal("manager"));
 
 /** Log a completed focus session (from the timer). Durations in seconds. */
 export const log = mutation({
@@ -14,6 +17,7 @@ export const log = mutation({
     projectId: v.optional(v.id("projects")),
     lifeAreaId: v.optional(v.id("lifeAreas")),
     sectionId: v.optional(v.id("sections")),
+    blockType: v.optional(blockTypeValidator),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -29,6 +33,7 @@ export const logManual = mutation({
     projectId: v.optional(v.id("projects")),
     taskId: v.optional(v.id("tasks")),
     date: v.optional(v.number()),
+    blockType: v.optional(blockTypeValidator),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -42,7 +47,86 @@ export const logManual = mutation({
       lifeAreaId: args.lifeAreaId,
       projectId: args.projectId,
       taskId: args.taskId,
+      blockType: args.blockType,
     });
+  },
+});
+
+/** Mark a logged session as deep (maker) or shallow (manager); null clears. */
+export const setBlockType = mutation({
+  args: { id: v.id("focusSessions"), blockType: v.union(blockTypeValidator, v.null()) },
+  handler: async (ctx, { id, blockType }) => {
+    const userId = await requireUser(ctx);
+    const s = await ctx.db.get(id);
+    if (!s || s.userId !== userId) throw new ConvexError("Session not found.");
+    await ctx.db.patch(id, { blockType: blockType ?? undefined });
+  },
+});
+
+/**
+ * This week (local Monday → Sunday) for the Focus page: totals, deep vs
+ * shallow split, and a per-day series with what was worked on. The client
+ * sends local-midnight timestamps so day buckets match the user's clock.
+ */
+export const week = query({
+  args: { weekStartMs: v.number(), todayStartMs: v.number() },
+  handler: async (ctx, { weekStartMs, todayStartMs }) => {
+    const userId = await requireUser(ctx);
+    const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000;
+    const [sessions, tasks, projects, areas] = await Promise.all([
+      ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").take(1500),
+      ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("projects").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("lifeAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    const taskById = new Map(tasks.map((t) => [t._id as string, t]));
+    const projById = new Map(projects.map((p) => [p._id as string, p]));
+    const areaName = (id?: string) => (id ? areas.find((a) => a._id === id)?.name : undefined);
+
+    // Day boundaries from the client's Monday midnight (DST shifts ≤1h are
+    // absorbed by flooring on 24h steps from the local Monday).
+    const DAYMS = 24 * 60 * 60 * 1000;
+    type DayAgg = { maker: number; manager: number; other: number; items: Map<string, { label: string; sub?: string; hours: number }> };
+    const days: DayAgg[] = Array.from({ length: 7 }, () => ({ maker: 0, manager: 0, other: 0, items: new Map() }));
+    let todaySec = 0;
+    let weekSec = 0;
+    let makerSec = 0;
+    let managerSec = 0;
+    for (const s of sessions) {
+      if (s.endTime >= todayStartMs && s.endTime < todayStartMs + DAYMS) todaySec += s.duration;
+      if (s.endTime < weekStartMs || s.endTime >= weekEndMs) continue;
+      weekSec += s.duration;
+      if (s.blockType === "maker") makerSec += s.duration;
+      else if (s.blockType === "manager") managerSec += s.duration;
+      const idx = Math.min(6, Math.max(0, Math.floor((s.endTime - weekStartMs) / DAYMS)));
+      const d = days[idx];
+      if (s.blockType === "maker") d.maker += s.duration;
+      else if (s.blockType === "manager") d.manager += s.duration;
+      else d.other += s.duration;
+      const task = s.taskId ? taskById.get(s.taskId) : undefined;
+      const proj = s.projectId ? projById.get(s.projectId) : undefined;
+      const key = task ? `t:${task._id}` : proj ? `p:${proj._id}` : `a:${s.lifeAreaId ?? "none"}`;
+      const label = task?.title ?? proj?.title ?? areaName(s.lifeAreaId) ?? "Focus";
+      const sub = task ? [proj?.title ?? (task.projectId ? projById.get(task.projectId)?.title : undefined), areaName(task.lifeAreaId)].filter(Boolean).join(" · ") : undefined;
+      const it = d.items.get(key) ?? { label, sub, hours: 0 };
+      it.hours += s.duration / 3600;
+      d.items.set(key, it);
+    }
+    const LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return {
+      todaySec,
+      weekSec,
+      makerSec,
+      managerSec,
+      untaggedSec: weekSec - makerSec - managerSec,
+      days: days.map((d, i) => ({
+        label: LABELS[i],
+        makerH: d.maker / 3600,
+        managerH: d.manager / 3600,
+        otherH: d.other / 3600,
+        items: [...d.items.values()].sort((a, b) => b.hours - a.hours).slice(0, 8),
+      })),
+    };
   },
 });
 
@@ -61,7 +145,9 @@ export const list = query({
 export const remove = mutation({
   args: { id: v.id("focusSessions") },
   handler: async (ctx, { id }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    const s = await ctx.db.get(id);
+    if (!s || s.userId !== userId) return;
     await ctx.db.delete(id);
   },
 });
@@ -70,7 +156,9 @@ export const remove = mutation({
 export const byTask = query({
   args: { taskId: v.id("tasks") },
   handler: async (ctx, { taskId }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    const task = await ctx.db.get(taskId);
+    if (!task || task.userId !== userId) return { total: 0, sessions: [] };
     const sessions = await ctx.db
       .query("focusSessions")
       .withIndex("by_task", (q) => q.eq("taskId", taskId))
@@ -138,7 +226,7 @@ export const rangeAnalytics = query({
     day0.setHours(0, 0, 0, 0);
 
     const areaMeta = (id: string) => {
-      if (id === "none") return { name: "Unattributed", color: "#6b7280" };
+      if (id === "none") return { name: "Unattributed", color: "var(--muted-foreground)" };
       const a = areas.find((x) => x._id === id);
       return { name: a?.name ?? "Other", color: a?.color };
     };

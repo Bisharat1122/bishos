@@ -7,6 +7,8 @@ import { Camera, Check, Loader2, Sparkles } from "lucide-react";
 import { Topbar, Card } from "@/components/ui";
 import { DesktopNotifications } from "@/components/push/DesktopNotifications";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
+import { toast, errorMessage } from "@/components/os/celebrate";
 
 type Fields = {
   name: string; city: string; occupation: string; business: string;
@@ -43,11 +45,15 @@ export default function ProfilePage() {
     setF((p) => ({ ...p, [k]: e.target.value }));
 
   async function save() {
+    // Never save before the stored profile has loaded — that would overwrite it with blanks.
+    if (!seeded) return;
     setSaving(true);
     try {
       await upsert(f);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      toast(errorMessage(err, "Couldn't save your profile"), { tone: "warning" });
     } finally {
       setSaving(false);
     }
@@ -56,12 +62,21 @@ export default function ProfilePage() {
   async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast("Pick an image file", { tone: "warning" });
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const url = await genUploadUrl();
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": file.type }, body: file });
+      if (!res.ok) throw new Error("Upload failed — try a smaller image.");
       const { storageId } = await res.json();
       await setAvatar({ avatarId: storageId });
+      toast("Photo updated", { tone: "success" });
+    } catch (err) {
+      toast(errorMessage(err, "Couldn't update your photo"), { tone: "warning" });
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -69,21 +84,29 @@ export default function ProfilePage() {
   }
 
   const initials = (f.name || "B").trim().slice(0, 1).toUpperCase();
-  const inp = "w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-primary/60";
+  const inp = "w-full rounded-md border border-input bg-card shadow-xs px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30";
 
   return (
     <div>
       <Topbar />
-      <div className="mx-auto max-w-3xl px-4 py-7 sm:px-8">
-        <h1 className="text-2xl font-bold tracking-tight">Profile</h1>
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Tell bishOS who you are. Your AI chat reads this to address you by name and tailor every answer to your life and business.
         </p>
 
+        {!seeded ? (
+          <div className="mt-6 space-y-4" aria-busy="true" aria-label="Loading profile">
+            <div className="skeleton h-[118px] rounded-xl" />
+            <div className="skeleton h-[196px] rounded-xl" />
+            <div className="skeleton h-[420px] rounded-xl" />
+          </div>
+        ) : (
+        <>
         {/* Avatar + identity */}
         <Card className="mt-6 flex flex-col items-center gap-4 sm:flex-row sm:items-center">
           <div className="relative">
-            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-primary/15 text-2xl font-bold text-primary">
+            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-primary/15 text-2xl font-semibold text-primary">
               {profile?.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={profile.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
@@ -93,7 +116,7 @@ export default function ProfilePage() {
             </div>
             <button
               onClick={() => fileRef.current?.click()}
-              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"
               title="Change photo"
             >
               {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
@@ -136,7 +159,7 @@ export default function ProfilePage() {
 
           <div className="mt-4 flex items-center gap-3">
             <button onClick={() => void save()} disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+              className={buttonVariants({ size: "lg" })}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
               {saving ? "Saving…" : saved ? "Saved" : "Save profile"}
             </button>
@@ -145,6 +168,8 @@ export default function ProfilePage() {
             </span>
           </div>
         </Card>
+        </>
+        )}
 
         {/* Notifications */}
         <Card className="mt-4">

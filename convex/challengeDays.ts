@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireUser } from "./helpers";
 import { refreshStreak } from "./habits";
+import { awardXp, revokeXp, XP } from "./os";
+import { syncTaskXp, revokeTaskXp } from "./tasks";
 
 const ymd = (ts: number) => new Date(ts).toISOString().slice(0, 10);
 
@@ -222,19 +224,25 @@ export const dayData = query({
     const day = await ctx.db.get(dayId);
     if (!day || day.userId !== userId) return null;
 
-    const [tasks, kpiValues, completions, habits, sessions] = await Promise.all([
+    const [tasks, kpiValues, completions, habits] = await Promise.all([
       ctx.db.query("tasks").withIndex("by_challengeDay", (q) => q.eq("challengeDayId", dayId)).collect(),
       ctx.db.query("challengeKpiValues").withIndex("by_day", (q) => q.eq("dayId", dayId)).collect(),
       // Habit "done" reads from the GLOBAL completions for this day's date, so
       // it stays in sync with the main Habits module.
       ctx.db.query("habitCompletions").withIndex("by_date", (q) => q.eq("userId", userId).eq("date", day.date)).collect(),
       ctx.db.query("habits").withIndex("by_challenge", (q) => q.eq("challengeId", day.challengeId)).collect(),
-      ctx.db.query("focusSessions").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
     ]);
 
-    // Focus seconds per task (join focus by taskId).
+    // Focus seconds per task — read only this day's tasks' sessions (by_task)
+    // instead of every session the user ever logged.
     const focusByTask = new Map<string, number>();
-    for (const s of sessions) if (s.taskId) focusByTask.set(s.taskId as string, (focusByTask.get(s.taskId as string) ?? 0) + s.duration);
+    const perTask = await Promise.all(
+      tasks.map((t) => ctx.db.query("focusSessions").withIndex("by_task", (q) => q.eq("taskId", t._id)).collect()),
+    );
+    perTask.forEach((rows, i) => {
+      const secs = rows.filter((r) => r.userId === userId).reduce((sum, r) => sum + r.duration, 0);
+      focusByTask.set(tasks[i]._id as string, secs);
+    });
 
     const focusBySection = new Map<string, number>();
     let focusTotal = 0;
@@ -248,6 +256,7 @@ export const dayData = query({
         status: t.status,
         sectionId: t.challengeSectionId,
         focusSeconds: secs,
+        lifeAreaId: t.lifeAreaId,
       };
     });
 
@@ -301,8 +310,9 @@ export const addTask = mutation({
 });
 
 export const toggleTask = mutation({
-  args: { taskId: v.id("tasks") },
-  handler: async (ctx, { taskId }) => {
+  // `date` = client-local today (XP + Top-3 bonus), same path as tasks.setStatus.
+  args: { taskId: v.id("tasks"), date: v.optional(v.string()) },
+  handler: async (ctx, { taskId, date }) => {
     const userId = await requireUser(ctx);
     const t = await ctx.db.get(taskId);
     if (!t || t.userId !== userId) return;
@@ -311,15 +321,17 @@ export const toggleTask = mutation({
       status: done ? "not_started" : "done",
       completedAt: done ? undefined : Date.now(),
     });
+    await syncTaskXp(ctx, userId, taskId, !done, date);
   },
 });
 
 export const removeTask = mutation({
-  args: { taskId: v.id("tasks") },
-  handler: async (ctx, { taskId }) => {
+  args: { taskId: v.id("tasks"), date: v.optional(v.string()) },
+  handler: async (ctx, { taskId, date }) => {
     const userId = await requireUser(ctx);
     const t = await ctx.db.get(taskId);
     if (!t || t.userId !== userId) return;
+    if (t.status === "done") await revokeTaskXp(ctx, userId, taskId, date);
     await ctx.db.delete(taskId);
   },
 });
@@ -338,7 +350,7 @@ export const setKpiValue = mutation({
     const day = await ctx.db.get(dayId);
     if (!day || day.userId !== userId) return;
     const def = await ctx.db.get(kpiDefId);
-    if (!def) return;
+    if (!def || def.userId !== userId || def.challengeId !== day.challengeId) return;
     const existing = await ctx.db
       .query("challengeKpiValues")
       .withIndex("by_day", (q) => q.eq("dayId", dayId))
@@ -377,8 +389,14 @@ export const toggleHabit = mutation({
       .withIndex("by_habit", (q) => q.eq("habitId", habitId))
       .filter((q) => q.eq(q.field("date"), day.date))
       .first();
-    if (existing) await ctx.db.delete(existing._id);
-    else await ctx.db.insert("habitCompletions", { userId, habitId, date: day.date });
+    const xpKey = `habit-${habitId}-${day.date}`;
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      await revokeXp(ctx, userId, xpKey);
+    } else {
+      await ctx.db.insert("habitCompletions", { userId, habitId, date: day.date });
+      await awardXp(ctx, userId, xpKey, XP.habit, "Habit", day.date);
+    }
 
     await refreshStreak(ctx, habitId);
   },

@@ -37,6 +37,8 @@ export function TaskTimerButton({ task, compact }: { task: Doc<"tasks">; compact
       areaId: task.lifeAreaId,
       projectId: task.projectId ?? "",
       taskTitle: task.title,
+      // High-energy tasks are deep (maker) work; low-energy ones are shallow.
+      blockType: task.energy === "high" ? "maker" : task.energy === "low" ? "manager" : undefined,
     });
     setPos(null);
   }
@@ -48,7 +50,7 @@ export function TaskTimerButton({ task, compact }: { task: Doc<"tasks">; compact
         onClick={open}
         title="Start a focus timer on this task"
         className={cn(
-          "flex items-center gap-1 rounded-full border font-medium transition",
+          "flex items-center gap-1 rounded-md border font-medium transition",
           compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",
           runningThis
             ? "border-primary/50 bg-primary/15 text-primary"
@@ -71,19 +73,19 @@ export function TaskTimerButton({ task, compact }: { task: Doc<"tasks">; compact
           <>
             <div className="fixed inset-0 z-[60]" onClick={() => setPos(null)} />
             <div
-              className="fixed z-[61] w-44 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-2xl"
+              className="fixed z-[61] w-44 overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-raised"
               style={{ top: pos.top, left: pos.left }}
             >
               <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Start timer</p>
               <button
                 onClick={() => start("pomodoro")}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Timer className="h-4 w-4 text-primary" /> Pomodoro
               </button>
               <button
                 onClick={() => start("stopwatch")}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Clock className="h-4 w-4 text-primary" /> Stopwatch
               </button>
@@ -92,13 +94,13 @@ export function TaskTimerButton({ task, compact }: { task: Doc<"tasks">; compact
                   <div className="my-1 border-t border-border" />
                   <button
                     onClick={() => { timer.stopAndLog(); setPos(null); }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-warning hover:bg-muted"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-warning hover:bg-accent"
                   >
                     <Square className="h-3.5 w-3.5" /> Stop &amp; log
                   </button>
                   <button
                     onClick={() => { router.push("/focus"); setPos(null); }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent"
                   >
                     <Clock className="h-4 w-4" /> Open Focus
                   </button>

@@ -7,19 +7,29 @@ import { Doc, Id } from "@/convex/_generated/dataModel";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   startOfDay,
-  startOfWeek,
   addDays,
   addMonths,
   isSameDay,
   isToday,
-  monthMatrix,
   WEEKDAYS,
   fmtDay,
   fmtRange,
   fmtMonthYear,
 } from "@/lib/date";
+import { dateOf, mondayOf, ymdOf } from "@/lib/day";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
 import { PRIORITY_STYLES } from "./TaskCard";
+import { toast, errorMessage } from "@/components/os/celebrate";
+
+/** Weeks start on Monday, like the rest of the app. */
+const startOfWeek = (d: Date) => dateOf(mondayOf(ymdOf(d)));
+/** 6×7 Monday-first grid covering the month that contains `d`. */
+const monthMatrix = (d: Date) => {
+  const start = startOfWeek(new Date(d.getFullYear(), d.getMonth(), 1));
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+};
+const WEEKDAYS_MON = [...WEEKDAYS.slice(1), WEEKDAYS[0]];
 
 type Mode = "day" | "3day" | "week" | "month";
 
@@ -54,17 +64,21 @@ export function TaskCalendar({
 
   function reschedule(taskId: Id<"tasks">, day: Date) {
     const t = tasks.find((x) => x._id === taskId);
-    if (t?.startAt) {
+    if (!t) return;
+    const fail = (e: unknown) => toast(errorMessage(e), { tone: "warning" });
+    if (t.startAt) {
       // preserve the time of day; shift the due/end by the same delta
       const src = new Date(t.startAt);
       const dst = new Date(day);
       dst.setHours(src.getHours(), src.getMinutes(), 0, 0);
       const delta = dst.getTime() - t.startAt;
-      void updateTask({ id: taskId, startAt: dst.getTime(), dueDate: t.dueDate ? t.dueDate + delta : undefined });
+      void updateTask({ id: taskId, startAt: dst.getTime(), dueDate: t.dueDate ? t.dueDate + delta : undefined }).catch(fail);
     } else {
-      const noon = new Date(day);
-      noon.setHours(12, 0, 0, 0);
-      void updateTask({ id: taskId, dueDate: noon.getTime() });
+      // keep the deadline's time of day (noon when it had none)
+      const src = t.dueDate ? new Date(t.dueDate) : null;
+      const dst = new Date(day);
+      dst.setHours(src ? src.getHours() : 12, src ? src.getMinutes() : 0, 0, 0);
+      void updateTask({ id: taskId, dueDate: dst.getTime() }).catch(fail);
     }
   }
 
@@ -96,33 +110,33 @@ export function TaskCalendar({
         <div className="flex items-center gap-1">
           <button
             onClick={() => navigate(-1)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted"
+            className={buttonVariants({ variant: "outline", size: "icon-sm" })}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => navigate(1)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted"
+            className={buttonVariants({ variant: "outline", size: "icon-sm" })}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
           <button
             onClick={() => setAnchor(startOfDay(new Date()))}
-            className="ml-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "ml-1")}
           >
             Today
           </button>
         </div>
         <h3 className="text-sm font-semibold">{title}</h3>
-        <div className="ml-auto flex rounded-lg border border-border p-0.5">
+        <div className="ml-auto inline-flex items-center rounded-lg bg-muted p-[3px] text-muted-foreground">
           {MODES.map((m) => (
             <button
               key={m.key}
               onClick={() => setMode(m.key)}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition",
+                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
                 mode === m.key
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -186,7 +200,7 @@ function Chip({
       onClick={onClick}
       title={`${time ? time + " · " : ""}${task.title}`}
       className={cn(
-        "cursor-grab truncate rounded-md border-l-2 bg-card-2 px-1.5 py-1 text-[11px] active:cursor-grabbing",
+        "cursor-grab truncate rounded-md border-l-2 bg-muted/50 px-1.5 py-1 text-[11px] active:cursor-grabbing",
         PRIORITY_STYLES[task.priority],
         task.status === "done" && "text-muted-foreground line-through",
       )}
@@ -252,7 +266,7 @@ function ColumnsView({
   }, []);
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-card">
       {/* day headers */}
       <div className="flex border-b border-border">
         <div className="w-14 shrink-0" />
@@ -311,7 +325,7 @@ function ColumnsView({
                     onClick={() => onChipClick(t._id)}
                     style={{ top, height }}
                     className={cn(
-                      "absolute inset-x-1 cursor-grab overflow-hidden rounded-md border-l-2 bg-card-2 px-1.5 py-0.5 text-left text-[11px] shadow-sm transition hover:brightness-110 active:cursor-grabbing",
+                      "absolute inset-x-1 cursor-grab overflow-hidden rounded-md border-l-2 bg-muted/50 px-1.5 py-0.5 text-left text-[11px] shadow-sm transition hover:bg-accent active:cursor-grabbing",
                       PRIORITY_STYLES[t.priority],
                       t.status === "done" && "line-through opacity-60",
                     )}
@@ -345,7 +359,7 @@ function MonthGrid({
   return (
     <div className="flex flex-1 flex-col">
       <div className="grid grid-cols-7">
-        {WEEKDAYS.map((w) => (
+        {WEEKDAYS_MON.map((w) => (
           <div
             key={w}
             className="px-2 py-1 text-center text-[10px] uppercase text-muted-foreground"
@@ -373,7 +387,7 @@ function MonthGrid({
               <div
                 className={cn(
                   "mb-1 text-right text-[11px]",
-                  isToday(day) ? "font-bold text-primary" : "text-muted-foreground",
+                  isToday(day) ? "font-semibold text-primary" : "text-muted-foreground",
                 )}
               >
                 {day.getDate()}

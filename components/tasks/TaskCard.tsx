@@ -3,6 +3,7 @@
 import { Doc } from "@/convex/_generated/dataModel";
 import { Trash2, GripVertical, CalendarClock, Clock, FolderKanban, Paperclip } from "lucide-react";
 import { TaskTimerButton } from "./TaskTimerButton";
+import { TaskMetaChips, type TaskLookups } from "./taskMeta";
 import { cn } from "@/lib/utils";
 
 export const PRIORITY_STYLES: Record<string, string> = {
@@ -43,6 +44,7 @@ export function TaskCard({
   onDelete,
   onClick,
   compact = false,
+  lookups,
 }: {
   task: Doc<"tasks">;
   areaName?: string;
@@ -51,6 +53,8 @@ export function TaskCard({
   onDelete?: () => void;
   onClick?: () => void;
   compact?: boolean;
+  /** Life OS names → renders when / estimate / energy / goal / deal / person chips. */
+  lookups?: TaskLookups;
 }) {
   const done = task.status === "done";
   const due = task.dueDate ? dueMeta(task.dueDate, done) : null;
@@ -62,7 +66,7 @@ export function TaskCard({
     <div
       onClick={onClick}
       className={cn(
-        "group rounded-xl border border-l-4 border-border bg-card-2",
+        "group rounded-xl border border-l-4 border-border bg-muted/50",
         onClick && "cursor-pointer",
         PRIORITY_STYLES[task.priority],
         compact ? "px-2 py-1.5" : "p-3",
@@ -83,19 +87,22 @@ export function TaskCard({
             {task.title}
           </p>
 
+          {/* Life OS chips: Top 3, when, deadline, estimate, energy, goal, project, deal, person, delegate */}
+          {lookups && <TaskMetaChips task={task} lk={lookups} compact={compact} className={compact ? "mt-1" : "mt-2"} />}
+
           {/* metrics — shown in both normal and compact (split) cards */}
-          <div className={cn("flex flex-wrap items-center gap-1.5 text-[10px]", compact ? "mt-1" : "mt-2")}>
+          <div className={cn("flex flex-wrap items-center gap-1.5 text-[10px]", compact ? "mt-1" : "mt-2", lookups && compact && "hidden")}>
             {!compact && (
               <span className={cn("font-semibold uppercase tracking-wide", PRIORITY_TEXT[task.priority])}>
                 {task.priority}
               </span>
             )}
 
-            {due && (
+            {due && !lookups && (
               <span
                 className={cn(
-                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-medium",
-                  due.urgent ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground",
+                  "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium",
+                  due.urgent ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground",
                 )}
               >
                 <CalendarClock className="h-3 w-3" /> {due.label}
@@ -103,12 +110,14 @@ export function TaskCard({
             )}
 
             {projectName ? (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-sprint/15 px-1.5 py-0.5 text-sprint">
-                <FolderKanban className="h-3 w-3" /> <span className="max-w-[7rem] truncate">{projectName}</span>
-              </span>
+              !lookups && (
+                <span className="inline-flex items-center gap-0.5 rounded-md bg-sprint/15 px-1.5 py-0.5 text-sprint">
+                  <FolderKanban className="h-3 w-3" /> <span className="max-w-[7rem] truncate">{projectName}</span>
+                </span>
+              )
             ) : (
               areaName && (
-                <span className="max-w-[7rem] truncate rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
+                <span className="max-w-[7rem] truncate rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground">
                   {areaName}
                 </span>
               )
@@ -131,7 +140,7 @@ export function TaskCard({
           {!compact && tags.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               {tags.slice(0, 4).map((t) => (
-                <span key={t} className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                <span key={t} className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                   #{t}
                 </span>
               ))}
@@ -147,7 +156,7 @@ export function TaskCard({
                 e.stopPropagation();
                 onDelete();
               }}
-              className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
+              className="text-muted-foreground opacity-0 transition hover:text-danger group-hover:opacity-100"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>

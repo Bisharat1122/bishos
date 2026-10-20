@@ -6,6 +6,7 @@ import { Music, Volume2, VolumeX, X, Play } from "lucide-react";
 import { FOCUS_TRACKS, DEFAULT_TRACK_ID } from "@/lib/focusMusic";
 import { useFocusTimer } from "./FocusTimerProvider";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
 
 const PREFS_KEY = "bishos.focusMusic.v1";
 
@@ -116,11 +117,11 @@ export function FocusMusicLayer() {
       {active && musicOn &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed bottom-4 left-4 z-[60] flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur">
+          <div className="fixed bottom-20 left-4 z-[60] flex items-center gap-2 rounded-xl lg:bottom-4 border border-border bg-popover/95 px-3 py-2 text-popover-foreground shadow-raised backdrop-blur">
             <button
               onClick={toggleMute}
               title={volume === 0 ? "Unmute" : "Mute"}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-primary hover:bg-muted"
+              className="flex h-6 w-6 items-center justify-center rounded-md text-primary hover:bg-accent"
             >
               {volume === 0 ? <VolumeX className="h-4 w-4" /> : <Music className="h-4 w-4" />}
             </button>
@@ -142,8 +143,8 @@ export function FocusMusicLayer() {
         typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setPromptOpen(false)} />
-            <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setPromptOpen(false)} />
+            <div className="relative w-full max-w-sm overflow-hidden rounded-xl border border-border bg-card shadow-xl">
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -156,7 +157,7 @@ export function FocusMusicLayer() {
                 </div>
                 <button
                   onClick={() => setPromptOpen(false)}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
                   title="No music"
                 >
                   <X className="h-4 w-4" />
@@ -215,13 +216,13 @@ export function FocusMusicLayer() {
               <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
                 <button
                   onClick={() => setPromptOpen(false)}
-                  className="rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+                  className={buttonVariants({ variant: "outline" })}
                 >
                   No music
                 </button>
                 <button
                   onClick={playChoice}
-                  className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                  className={buttonVariants()}
                 >
                   <Play className="h-3.5 w-3.5" /> Play
                 </button>

@@ -3,133 +3,231 @@
 @tailwind utilities;
 
 /*
- * bishOS design system — inspired by the reference dashboards:
- * near-black surfaces, vibrant lime/emerald green accent, orange secondary
- * (for charts), soft rounded cards, unique geometric font (Sora).
+ * bishOS design tokens — the Syncora design system: modern, monochrome,
+ * content-first. Neutral surfaces in both themes; a black/white primary like
+ * modern creator tools; colour reserved for meaning (status, charts, categories).
+ * Text/background pairs target WCAG AA (≥ 4.5:1 for body text).
+ *
+ * The shared block mirrors Syncora's src/app/globals.css — keep them in sync.
+ * Tailwind maps every token in tailwind.config.ts (opacity modifiers via color-mix).
  */
 :root {
-  --radius: 1rem;
+  --radius: 0.75rem;
 
-  /* Light mode kept minimal — the app is dark-first. */
-  --background: 150 20% 98%;
-  --foreground: 160 30% 10%;
-  --card: 0 0% 100%;
-  --muted: 150 16% 94%;
-  --muted-foreground: 155 10% 40%;
-  --primary: 142 70% 45%;
-  --primary-foreground: 160 60% 6%;
-  --accent: 84 78% 55%;
-  --warning: 28 95% 55%;
-  --sprint: 265 80% 60%;
-  --border: 150 14% 88%;
+  /* Surfaces — bishOS light mode uses a soft, cool off-white canvas (not pure
+     white) with near-white cards on top: calmer on the eyes, clearer depth.
+     (Deliberate deviation from Syncora's pure-white light surfaces.) */
+  --background: #f3f5f8;
+  --foreground: #141820;
+  --card: #fcfcfd;
+  --card-foreground: #141820;
+  --popover: #ffffff;
+  --popover-foreground: #141820;
+
+  /* Monochrome primary */
+  --primary: #171a21;
+  --primary-foreground: #fafafa;
+  --secondary: #eceff3;
+  --secondary-foreground: #262b34;
+  --muted: #eceff3;
+  --muted-foreground: #5a6170; /* ≈5.6:1 on the canvas */
+  --accent: #e8ebf0; /* hover / selected surfaces */
+  --accent-foreground: #171a21;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e1e5eb;
+  --input: #d7dce4;
+  --ring: #98a1b0;
+
+  /* Status (text meets 4.5:1 on its soft background) */
+  --success: #15803d;
+  --success-soft: #ecfdf3;
+  --warning: #a35d00;
+  --warning-soft: #fff7e6;
+  --danger: #c81e1e;
+  --danger-soft: #fef1f1;
+  --info: #1d4ed8;
+  --info-soft: #eef4ff;
+
+  /* Sidebar: a shade deeper than the canvas for structure */
+  --sidebar: #eceff3;
+  --sidebar-foreground: #39404c;
+  --sidebar-muted: #5e6575;
+  --sidebar-accent: #dfe4eb;
+  --sidebar-accent-foreground: #141820;
+  --sidebar-border: #dfe3ea;
+  --sidebar-primary: #171a21;
+
+  /* Charts — colour-blind-friendly order */
+  --chart-1: #2563eb;
+  --chart-2: #0d9488;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #e11d48;
+
+  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.03);
+  --shadow-raised: 0 10px 28px -8px rgb(16 24 40 / 0.16), 0 2px 6px -2px rgb(16 24 40 / 0.06);
+
+  /* bishOS-only: category colour for sprints & challenges (resolves per theme). */
+  --sprint: var(--chart-4);
 }
 
 .dark {
-  /* near-black green-tinted base */
-  --background: 160 18% 5%;
-  --foreground: 150 20% 96%;
-  --card: 158 16% 9%;
-  --card-2: 158 16% 12%;
-  --muted: 158 14% 14%;
-  --muted-foreground: 150 10% 62%;
-  /* vibrant lime/emerald accent */
-  --primary: 88 80% 58%;
-  --primary-foreground: 160 40% 8%;
-  --accent: 150 70% 48%;
-  --warning: 28 95% 58%;
-  --sprint: 265 85% 66%;
-  --border: 158 14% 16%;
-}
+  --background: #111111;
+  --foreground: #ededed;
+  --card: #1a1a1a;
+  --card-foreground: #ededed;
+  --popover: #1c1c1c;
+  --popover-foreground: #ededed;
 
-* {
-  border-color: hsl(var(--border));
-}
+  --primary: #f5f5f5;
+  --primary-foreground: #111111;
+  --secondary: #232323;
+  --secondary-foreground: #e5e5e5;
+  --muted: #222222;
+  --muted-foreground: #a3a3a3; /* 7:1 on #1a1a1a */
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #2a2a2a;
+  --input: #333333;
+  --ring: #737373;
 
-html {
+  --success: #4ade80;
+  --success-soft: rgb(34 197 94 / 0.14);
+  --warning: #fbbf24;
+  --warning-soft: rgb(245 158 11 / 0.14);
+  --danger: #f87171;
+  --danger-soft: rgb(239 68 68 / 0.15);
+  --info: #93b4ff;
+  --info-soft: rgb(59 130 246 / 0.16);
+
+  --sidebar: #171717;
+  --sidebar-foreground: #d4d4d4;
+  --sidebar-muted: #8f8f8f;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #232323;
+  --sidebar-primary: #fafafa;
+
+  --chart-1: #60a5fa;
+  --chart-2: #2dd4bf;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #fb7185;
+
+  /* Syncora uses `none`; Tailwind v3 composes shadows into a list, so use an empty shadow. */
+  --shadow-card: 0 0 #0000;
+  --shadow-raised: 0 12px 32px -8px rgb(0 0 0 / 0.6);
+
   color-scheme: dark;
 }
 
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-feature-settings: "ss01" 1, "cv01" 1, "calt" 1;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-variant-numeric: lining-nums;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  [role="menuitem"],
+  [role="option"],
+  [role="tab"],
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+  /* Avoid the 300ms tap delay on touch devices. */
+  a,
+  button,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Instant tactile feedback on every clickable control (utilities can override). */
+  button:not(:disabled),
+  a,
+  [role="button"] {
+    transition:
+      transform 0.07s ease,
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+  }
+  button:not(:disabled):active,
+  [role="button"]:active {
+    transform: scale(0.98);
+  }
+
+  /* Native dropdowns: custom chevron that never overlaps the field; popup follows the theme. */
+  select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 1rem;
+    padding-right: 2.1rem !important;
+  }
+  select option {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
 }
 
-/* Subtle ambient green glow used behind hero areas */
-.glow-grid {
-  background-image:
-    radial-gradient(60% 50% at 80% 0%, hsl(150 70% 30% / 0.18), transparent 70%),
-    linear-gradient(to bottom, hsl(158 16% 7%), hsl(160 18% 5%));
-  /* pin the gradient to the viewport so the glow stays put while content scrolls */
-  background-attachment: fixed;
-  background-repeat: no-repeat;
-  background-size: cover;
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
 }
 
 /* Daily Flow header button — gentle attention pulse while steps remain. */
 @keyframes dailyGlow {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
-  50% { box-shadow: 0 0 10px 1px hsl(var(--primary) / 0.45); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--ring) 0%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
 }
 .daily-glow {
   animation: dailyGlow 2.6s ease-in-out infinite;
-  background-image: linear-gradient(110deg, hsl(var(--primary) / 0.16), hsl(var(--sprint) / 0.16));
-}
-
-.card {
-  background-color: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius);
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted));
-  border-radius: 999px;
-}
-
-/* Branded native dropdowns — dark popup + custom chevron that never overlaps the field */
-select {
-  color-scheme: dark;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa3ae' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.6rem center;
-  background-size: 1rem;
-  padding-right: 2.1rem !important;
-}
-select option {
-  background-color: hsl(var(--card));
-  color: hsl(var(--foreground));
-}
-/* Dark calendar/clock pickers for date/time inputs */
-input[type="date"],
-input[type="time"],
-input[type="datetime-local"] {
-  color-scheme: dark;
-}
-
-/* --- Speed & smoothness --- */
-/* Instant tactile feedback on every clickable control */
-button:not(:disabled),
-a,
-[role="button"] {
-  transition:
-    transform 0.07s ease,
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    opacity 0.15s ease;
-}
-button:not(:disabled):active,
-[role="button"]:active {
-  transform: scale(0.97);
 }
 
 /* Skeleton shimmer for loading states */
@@ -141,8 +239,8 @@ button:not(:disabled):active,
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: hsl(var(--muted) / 0.7);
-  border-radius: 0.5rem;
+  background: var(--muted);
+  border-radius: calc(var(--radius) - 2px);
 }
 .skeleton::after {
   content: "";
@@ -152,7 +250,7 @@ button:not(:disabled):active,
   background: linear-gradient(
     90deg,
     transparent,
-    hsl(var(--muted-foreground) / 0.1),
+    color-mix(in oklab, var(--muted-foreground) 10%, transparent),
     transparent
   );
   animation: shimmer 1.4s infinite;
@@ -179,4 +277,49 @@ button:not(:disabled):active,
 }
 .fade-in {
   animation: fadeIn 0.18s ease-out;
+}
+
+/* ── Life OS motion: celebratory, subtle, reduced-motion safe ─────────── */
+@keyframes osPop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.os-pop {
+  animation: osPop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes osRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.os-rise {
+  animation: osRise 0.35s ease-out backwards;
+}
+@keyframes osToastIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.os-toast {
+  animation: osToastIn 0.22s ease-out;
+}
+@keyframes osShine {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+/* Shimmering progress fill for XP / rings. */
+.os-shine {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in oklab, var(--background) 35%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: osShine 2.8s linear infinite;
+}
+/* Check-off strike animation for completed list items. */
+.os-done-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--muted-foreground);
+  color: var(--muted-foreground);
 }

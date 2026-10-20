@@ -168,11 +168,11 @@ export function SlashEditor({
           }
         }}
         onClick={(e) => recompute(value, e.currentTarget.selectionStart)}
-        className="w-full resize-y rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-primary/60"
+        className="w-full resize-y rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
       />
 
       {open && (
-        <div className="absolute left-2 top-2 z-20 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+        <div className="absolute left-2 top-2 z-20 w-64 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-raised">
           <p className="border-b border-border px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             {mode.kind === "wiki" ? "Link a note" : "Blocks"}
           </p>
@@ -186,7 +186,7 @@ export function SlashEditor({
                   onClick={() => chooseBlock(b)}
                   className={cn(
                     "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm",
-                    idx === active ? "bg-primary/15 text-foreground" : "text-muted-foreground",
+                    idx === active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -205,7 +205,7 @@ export function SlashEditor({
                   onClick={() => chooseWiki(t)}
                   className={cn(
                     "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm",
-                    idx === active ? "bg-primary/15 text-foreground" : "text-muted-foreground",
+                    idx === active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
                   )}
                 >
                   <Link2 className="h-4 w-4" />

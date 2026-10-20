@@ -6,13 +6,16 @@ import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { TaskCard } from "./TaskCard";
+import type { TaskLookups } from "./taskMeta";
+import { toast, errorMessage } from "@/components/os/celebrate";
+import { todayYmd } from "@/lib/day";
 
 type Status = "not_started" | "in_progress" | "done";
 
 const COLUMNS: { key: Status; label: string; accent: string }[] = [
   { key: "not_started", label: "Not started", accent: "bg-muted-foreground" },
   { key: "in_progress", label: "In progress", accent: "bg-warning" },
-  { key: "done", label: "Done", accent: "bg-primary" },
+  { key: "done", label: "Done", accent: "bg-success" },
 ];
 
 /** Effective sort key — manual order if set, else creation time. Higher = top. */
@@ -27,6 +30,7 @@ export function TaskBoard({
   focusByTask,
   onSelect,
   compact = false,
+  lookups,
 }: {
   tasks: Doc<"tasks">[];
   areaName: (id: Id<"lifeAreas">) => string | undefined;
@@ -34,6 +38,7 @@ export function TaskBoard({
   focusByTask?: Map<string, number>;
   onSelect?: (id: Id<"tasks">) => void;
   compact?: boolean;
+  lookups?: TaskLookups;
 }) {
   const setOrder = useMutation(api.tasks.setOrder).withOptimisticUpdate((store, { id, order, status }) => {
     const cur = store.getQuery(api.tasks.list, {});
@@ -77,7 +82,7 @@ export function TaskBoard({
     const order = computeOrder(col, at.taskId, at.before);
     const dragged = tasks.find((t) => t._id === draggingId);
     const status = dragged && dragged.status !== col ? col : undefined;
-    void setOrder({ id: draggingId, order, status });
+    void setOrder({ id: draggingId, order, status, date: lookups?.today ?? todayYmd() }).catch((e) => toast(errorMessage(e), { tone: "warning" }));
     setDraggingId(null);
     setDropAt(null);
   }
@@ -99,14 +104,14 @@ export function TaskBoard({
               handleDrop(col.key);
             }}
             className={cn(
-              "flex flex-col rounded-2xl border border-border bg-card/50 p-3 transition-colors",
+              "flex flex-col rounded-xl border border-border bg-card/50 p-3 transition-colors",
               active && "border-primary/60 bg-primary/5",
             )}
           >
             <div className="mb-3 flex items-center gap-2 px-1">
               <span className={cn("h-2 w-2 rounded-full", col.accent)} />
               <h3 className="text-sm font-semibold">{col.label}</h3>
-              <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="ml-auto rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                 {colTasks.length}
               </span>
             </div>
@@ -146,9 +151,12 @@ export function TaskBoard({
                       areaName={areaName(t.lifeAreaId)}
                       projectName={t.projectId ? projectName?.(t.projectId) : undefined}
                       focusSeconds={focusByTask?.get(t._id)}
-                      onDelete={() => void removeTask({ id: t._id })}
+                      onDelete={() => {
+                        if (confirm(`Delete “${t.title}”?`)) void removeTask({ id: t._id, date: lookups?.today ?? todayYmd() });
+                      }}
                       onClick={onSelect ? () => onSelect(t._id) : undefined}
                       compact={compact}
+                      lookups={lookups}
                     />
                     {showAfter && <DropLine />}
                   </div>

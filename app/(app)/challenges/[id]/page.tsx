@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
@@ -17,6 +17,9 @@ import { MarkdownLite } from "@/components/tasks/MarkdownLite";
 import { TaskDetailPanel } from "@/components/tasks/TaskDetailPanel";
 import { useFocusTimer } from "@/components/focus/FocusTimerProvider";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
+import { toast, errorMessage } from "@/components/os/celebrate";
+import { useToday } from "@/lib/day";
 
 const fmtDur = (secs: number) => {
   const h = Math.floor(secs / 3600);
@@ -68,10 +71,10 @@ export default function ChallengeWorkspace() {
   }, [selected]);
 
   if (challenge === undefined) {
-    return <div><Topbar /><div className="px-4 py-7 sm:px-8"><div className="h-64 animate-pulse rounded-2xl border border-border bg-card" /></div></div>;
+    return <div><Topbar /><div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8"><div className="h-64 animate-pulse rounded-xl border border-border bg-card shadow-card" /></div></div>;
   }
   if (challenge === null) {
-    return <div><Topbar /><div className="px-4 py-7 sm:px-8"><p className="text-sm text-muted-foreground">Challenge not found.</p><Link href="/challenges" className="text-sm text-sprint">← Challenges</Link></div></div>;
+    return <div><Topbar /><div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8"><p className="text-sm text-muted-foreground">Challenge not found.</p><Link href="/challenges" className="text-sm text-sprint">← Challenges</Link></div></div>;
   }
 
   return (
@@ -84,8 +87,9 @@ export default function ChallengeWorkspace() {
             <Link href="/challenges" className="text-xs text-muted-foreground hover:text-foreground">← Challenges</Link>
             <div className="mt-1 flex items-center gap-1.5">
               <span className="text-lg">{challenge.icon || "🚀"}</span>
-              <h2 className="min-w-0 flex-1 truncate text-sm font-bold">{challenge.name}</h2>
+              <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{challenge.name}</h2>
             </div>
+            <ChallengeActions id={cid} status={challenge.status} name={challenge.name} />
           </div>
           <button
             onClick={() => setSelected(null)}
@@ -107,7 +111,22 @@ export default function ChallengeWorkspace() {
           </button>
           <div className="flex items-center justify-between px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Days
-            <button onClick={async () => { const { name, date } = todayNameAndDate(); const d = await createDay({ challengeId: cid, name, date }); setSelected(d); }} className="text-sprint hover:text-sprint" title="New day"><Plus className="h-4 w-4" /></button>
+            <button
+              onClick={async () => {
+                const { name, date } = todayNameAndDate();
+                try {
+                  const d = await createDay({ challengeId: cid, name, date });
+                  setSelected(d);
+                } catch (e) {
+                  toast(errorMessage(e), { tone: "warning" });
+                }
+              }}
+              className="text-sprint hover:text-sprint"
+              title="New day"
+              aria-label="New day"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {days?.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">No days yet. Click + to start.</p>}
@@ -123,7 +142,7 @@ export default function ChallengeWorkspace() {
                   role="button"
                   tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); if (confirm("Delete this day?")) { void removeDay({ id: d._id }); if (selected === d._id) setSelected(null); } }}
-                  className="opacity-0 transition group-hover:opacity-100 hover:text-red-400"
+                  className="opacity-0 transition group-hover:opacity-100 hover:text-danger"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </span>
@@ -139,7 +158,7 @@ export default function ChallengeWorkspace() {
           ) : selected === "table" ? (
             <DaysTable challengeId={cid} />
           ) : selected ? (
-            <DayView key={selected} dayId={selected} challengeId={cid} />
+            <DayView key={selected} dayId={selected} challengeId={cid} onGone={() => setSelected(null)} />
           ) : (
             <Overview challengeId={cid} />
           )}
@@ -149,11 +168,57 @@ export default function ChallengeWorkspace() {
   );
 }
 
+/** Complete / archive (→ "Past" on the list) / reactivate / delete a challenge. */
+function ChallengeActions({ id, status, name }: { id: Id<"challenges">; status: string; name: string }) {
+  const setStatus = useMutation(api.challenges.setStatus);
+  const remove = useMutation(api.challenges.remove);
+  const router = useRouter();
+  const run = (p: Promise<unknown>, msg: string) =>
+    void p.then(() => toast(msg, { tone: "success" })).catch((e) => toast(errorMessage(e), { tone: "warning" }));
+  const btn = "rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1">
+      {status === "active" ? (
+        <>
+          <button type="button" onClick={() => run(setStatus({ id, status: "completed" }), "Challenge completed — moved to Past")} className={btn}>
+            Complete
+          </button>
+          <button type="button" onClick={() => run(setStatus({ id, status: "archived" }), "Challenge archived — moved to Past")} className={btn}>
+            Archive
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] capitalize text-muted-foreground">{status}</span>
+          <button type="button" onClick={() => run(setStatus({ id, status: "active" }), "Challenge reactivated")} className={btn}>
+            Reactivate
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={async () => {
+          if (!confirm(`Delete “${name}”? Its days, sections and KPIs are removed; tasks and habits are kept but unlinked.`)) return;
+          try {
+            await remove({ id });
+            router.push("/challenges");
+          } catch (e) {
+            toast(errorMessage(e), { tone: "warning" });
+          }
+        }}
+        className={cn(btn, "hover:text-danger")}
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <Card>
       <div className="flex items-center justify-between text-sm text-muted-foreground">{label}<span>{icon}</span></div>
-      <div className="mt-2 text-2xl font-bold tracking-tight">{value}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
     </Card>
   );
 }
@@ -166,7 +231,7 @@ function Overview({ challengeId }: { challengeId: Id<"challenges"> }) {
   const addSection = useMutation(api.challengeSections.addSection);
   const [newSection, setNewSection] = useState("");
 
-  if (!data || !structure) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl border border-border bg-card" /></div>;
+  if (!data || !structure) return <div className="p-6"><div className="h-40 animate-pulse rounded-xl border border-border bg-card shadow-card" /></div>;
   const t = data.totals;
   const rollup = new Map(data.sections.map((s) => [s._id as string, s]));
   const c = data.challenge;
@@ -176,10 +241,11 @@ function Overview({ challengeId }: { challengeId: Id<"challenges"> }) {
       {/* Challenge header */}
       <div className="flex items-center gap-2">
         <span className="text-2xl">{c.icon || "🚀"}</span>
-        <h1 className="text-2xl font-bold tracking-tight">{c.name}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
       </div>
       {c.description && <p className="mt-1 text-sm text-muted-foreground">{c.description}</p>}
       {c.outcome && <p className="mt-1 text-sm"><span className="text-muted-foreground">Outcome: </span>{c.outcome}</p>}
+      <ChallengeLinks challenge={c} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat icon={<Clock className="h-4 w-4" />} label="Total focus" value={`${t.focusHours}h`} />
@@ -205,8 +271,8 @@ function Overview({ challengeId }: { challengeId: Id<"challenges"> }) {
         ))}
       </div>
       <div className="mt-3 flex gap-2">
-        <input value={newSection} onChange={(e) => setNewSection(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newSection.trim()) { void addSection({ challengeId, name: newSection.trim() }); setNewSection(""); } }} placeholder="Add a section…" className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-sprint/60" />
-        <button onClick={() => { if (newSection.trim()) { void addSection({ challengeId, name: newSection.trim() }); setNewSection(""); } }} className="rounded-lg bg-sprint px-4 py-2 text-sm font-medium text-white">Add</button>
+        <input value={newSection} onChange={(e) => setNewSection(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newSection.trim()) { void addSection({ challengeId, name: newSection.trim() }); setNewSection(""); } }} placeholder="Add a section…" className="flex-1 rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />
+        <button onClick={() => { if (newSection.trim()) { void addSection({ challengeId, name: newSection.trim() }); setNewSection(""); } }} className={buttonVariants()}>Add</button>
       </div>
 
       <h2 className="mt-6 mb-2 text-sm font-semibold">Habits</h2>
@@ -214,6 +280,43 @@ function Overview({ challengeId }: { challengeId: Id<"challenges"> }) {
       <HabitsManager challengeId={challengeId} />
 
       <p className="mt-6 text-center text-xs text-muted-foreground">Create a day from the side panel to start logging.</p>
+    </div>
+  );
+}
+
+/** Life OS links: the 12-week goal this challenge serves + its Life Area. */
+function ChallengeLinks({ challenge }: { challenge: { _id: Id<"challenges">; goalId?: Id<"goals">; primaryLifeAreaId?: Id<"lifeAreas"> } }) {
+  const goals = useQuery(api.goals.list);
+  const areas = useQuery(api.lifeAreas.list);
+  const update = useMutation(api.challenges.update);
+  const goal = goals?.find((g) => g._id === challenge.goalId);
+  const area = areas?.find((a) => a._id === challenge.primaryLifeAreaId);
+  const options = (goals ?? [])
+    .filter((g) => (g.level === "cycle" || g.level === "annual") && g.goalStatus !== "dropped" && g.goalStatus !== "achieved")
+    .sort((a, b) => Number(a.level !== "cycle") - Number(b.level !== "cycle") || a.title.localeCompare(b.title));
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+      <span className="flex items-center gap-1.5 text-muted-foreground"><Target className="h-4 w-4" /> Serves goal</span>
+      <select
+        value={challenge.goalId ?? ""}
+        onChange={(e) => void update({ id: challenge._id, goalId: (e.target.value || null) as Id<"goals"> | null })}
+        className="h-8 max-w-[16rem] rounded-md border border-input bg-card px-2 text-sm shadow-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
+        aria-label="12-week goal this challenge serves"
+      >
+        <option value="">None</option>
+        {options.map((g) => (
+          <option key={g._id} value={g._id}>{g.level === "cycle" ? "12w · " : "Year · "}{g.title}</option>
+        ))}
+        {goal && !options.some((g) => g._id === goal._id) && <option value={goal._id}>{goal.title}</option>}
+      </select>
+      {goal && (
+        <Link href={`/goals/${goal._id}`} className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Open goal →</Link>
+      )}
+      {area && (
+        <Link href={`/life-areas/${area._id}`} className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+          Life Area: {area.name}
+        </Link>
+      )}
     </div>
   );
 }
@@ -236,9 +339,9 @@ function HabitsManager({ challengeId }: { challengeId: Id<"challenges"> }) {
           {opts.linked.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {opts.linked.map((h) => (
-                <span key={h._id} className="flex items-center gap-1 rounded-full bg-sprint px-2.5 py-1 text-xs text-white">
+                <span key={h._id} className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs text-primary-foreground">
                   <Flame className="h-3 w-3" /> {h.title}
-                  <button onClick={() => void unlink({ habitId: h._id })} className="hover:text-white/70"><X className="h-3 w-3" /></button>
+                  <button onClick={() => void unlink({ habitId: h._id })} className="hover:text-primary-foreground/70"><X className="h-3 w-3" /></button>
                 </span>
               ))}
             </div>
@@ -248,7 +351,7 @@ function HabitsManager({ challengeId }: { challengeId: Id<"challenges"> }) {
               <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">Add an existing habit</p>
               <div className="flex flex-wrap gap-1.5">
                 {opts.available.map((h) => (
-                  <button key={h._id} onClick={() => void link({ id: challengeId, habitId: h._id })} className="flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-sprint/60 hover:text-foreground">
+                  <button key={h._id} onClick={() => void link({ id: challengeId, habitId: h._id })} className="flex items-center gap-1 rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-ring hover:text-foreground">
                     <Plus className="h-3 w-3" /> {h.title}
                   </button>
                 ))}
@@ -258,8 +361,8 @@ function HabitsManager({ challengeId }: { challengeId: Id<"challenges"> }) {
         </>
       )}
       <div className="mt-3 flex gap-2">
-        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { void create({ id: challengeId, title: name.trim() }); setName(""); } }} placeholder="New habit (e.g. Gym, Quran, Journal)…" className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-sprint/60" />
-        <button onClick={() => { if (name.trim()) { void create({ id: challengeId, title: name.trim() }); setName(""); } }} className="rounded-lg bg-sprint px-4 py-2 text-sm font-medium text-white">Create</button>
+        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { void create({ id: challengeId, title: name.trim() }); setName(""); } }} placeholder="New habit (e.g. Gym, Quran, Journal)…" className="flex-1 rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />
+        <button onClick={() => { if (name.trim()) { void create({ id: challengeId, title: name.trim() }); setName(""); } }} className={buttonVariants()}>Create</button>
       </div>
     </Card>
   );
@@ -288,7 +391,7 @@ function SectionManager({ section, index, count, focusHours, tasksDone, tasksTot
   const [kTarget, setKTarget] = useState("");
 
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <div className="rounded-xl border border-border bg-card shadow-card">
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", open && "rotate-90")} />
@@ -301,7 +404,7 @@ function SectionManager({ section, index, count, focusHours, tasksDone, tasksTot
         </span>
         <button onClick={() => void reorder({ id: section._id, direction: "up" })} disabled={index === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronUp className="h-3.5 w-3.5" /></button>
         <button onClick={() => void reorder({ id: section._id, direction: "down" })} disabled={index === count - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronDown className="h-3.5 w-3.5" /></button>
-        <button onClick={() => { if (confirm(`Delete section "${section.name}"?`)) void removeSection({ id: section._id }); }} className="text-muted-foreground hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+        <button onClick={() => { if (confirm(`Delete section "${section.name}"?`)) void removeSection({ id: section._id }); }} className="text-muted-foreground hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
 
       {open && (
@@ -314,12 +417,12 @@ function SectionManager({ section, index, count, focusHours, tasksDone, tasksTot
                 <div key={g._id} className="flex items-center gap-2">
                   <button onClick={() => void toggleGoal({ id: g._id })} className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded border", g.done ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{g.done && <Check className="h-2.5 w-2.5" />}</button>
                   <span className={cn("min-w-0 flex-1 truncate text-sm", g.done && "text-muted-foreground line-through")}>{g.title}</span>
-                  <button onClick={() => void removeGoal({ id: g._id })} className="text-muted-foreground hover:text-red-400"><X className="h-3 w-3" /></button>
+                  <button onClick={() => void removeGoal({ id: g._id })} className="text-muted-foreground hover:text-danger"><X className="h-3 w-3" /></button>
                 </div>
               ))}
               {section.goals.length === 0 && <p className="text-xs text-muted-foreground">No goals yet.</p>}
             </div>
-            <input value={newGoal} onChange={(e) => setNewGoal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newGoal.trim()) { void addGoal({ sectionId: section._id, title: newGoal.trim() }); setNewGoal(""); } }} placeholder="Add goal…" className="mt-2 w-full rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-xs outline-none focus:border-sprint/60" />
+            <input value={newGoal} onChange={(e) => setNewGoal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newGoal.trim()) { void addGoal({ sectionId: section._id, title: newGoal.trim() }); setNewGoal(""); } }} placeholder="Add goal…" className="mt-2 w-full rounded-md border border-input bg-card shadow-xs px-2.5 py-1.5 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />
           </div>
 
           {/* KPI defs */}
@@ -329,18 +432,18 @@ function SectionManager({ section, index, count, focusHours, tasksDone, tasksTot
               {section.kpiDefs.map((k) => (
                 <div key={k._id} className="flex items-center gap-2 text-sm">
                   <span className="min-w-0 flex-1 truncate">{k.name}</span>
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{k.type}{k.unit ? ` · ${k.unit}` : ""}{k.target != null ? ` · target ${k.target}` : ""}</span>
-                  <button onClick={() => void removeKpiDef({ id: k._id })} className="text-muted-foreground hover:text-red-400"><X className="h-3 w-3" /></button>
+                  <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{k.type}{k.unit ? ` · ${k.unit}` : ""}{k.target != null ? ` · target ${k.target}` : ""}</span>
+                  <button onClick={() => void removeKpiDef({ id: k._id })} className="text-muted-foreground hover:text-danger"><X className="h-3 w-3" /></button>
                 </div>
               ))}
               {section.kpiDefs.length === 0 && <p className="text-xs text-muted-foreground">No KPIs yet.</p>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <input value={kName} onChange={(e) => setKName(e.target.value)} placeholder="KPI name" className="min-w-0 flex-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs outline-none" />
-              <select value={kType} onChange={(e) => setKType(e.target.value as KpiType)} className="rounded-lg border border-border bg-muted/30 px-1.5 py-1.5 text-xs outline-none"><option value="number">number</option><option value="checkbox">yes/no</option><option value="text">text</option></select>
-              {kType === "number" && <input value={kUnit} onChange={(e) => setKUnit(e.target.value)} placeholder="unit" className="w-14 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs outline-none" />}
-              {kType === "number" && <input type="number" value={kTarget} onChange={(e) => setKTarget(e.target.value)} placeholder="target" className="w-16 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs outline-none" />}
-              <button onClick={() => { if (kName.trim()) { void addKpiDef({ sectionId: section._id, name: kName.trim(), type: kType, unit: kUnit.trim() || undefined, target: kTarget ? Number(kTarget) : undefined }); setKName(""); setKUnit(""); setKTarget(""); } }} className="rounded-lg bg-sprint px-2.5 py-1.5 text-xs font-medium text-white">Add</button>
+              <input value={kName} onChange={(e) => setKName(e.target.value)} placeholder="KPI name" className="min-w-0 flex-1 rounded-md border border-input bg-card shadow-xs px-2 py-1.5 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />
+              <select value={kType} onChange={(e) => setKType(e.target.value as KpiType)} className="rounded-md border border-input bg-card shadow-xs px-1.5 py-1.5 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"><option value="number">number</option><option value="checkbox">yes/no</option><option value="text">text</option></select>
+              {kType === "number" && <input value={kUnit} onChange={(e) => setKUnit(e.target.value)} placeholder="unit" className="w-14 rounded-md border border-input bg-card shadow-xs px-2 py-1.5 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />}
+              {kType === "number" && <input type="number" value={kTarget} onChange={(e) => setKTarget(e.target.value)} placeholder="target" className="w-16 rounded-md border border-input bg-card shadow-xs px-2 py-1.5 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />}
+              <button onClick={() => { if (kName.trim()) { void addKpiDef({ sectionId: section._id, name: kName.trim(), type: kType, unit: kUnit.trim() || undefined, target: kTarget ? Number(kTarget) : undefined }); setKName(""); setKUnit(""); setKTarget(""); } }} className={buttonVariants({ size: "sm" })}>Add</button>
             </div>
           </div>
 
@@ -352,8 +455,8 @@ function SectionManager({ section, index, count, focusHours, tasksDone, tasksTot
             </div>
             {editSyl ? (
               <div>
-                <textarea value={syllabus} onChange={(e) => setSyllabus(e.target.value)} rows={6} placeholder="Curriculum / reference (markdown)…" className="w-full resize-none rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs outline-none focus:border-sprint/60" />
-                <button onClick={() => { void updateSection({ id: section._id, syllabus }); setEditSyl(false); }} className="mt-2 rounded-lg bg-sprint px-3 py-1.5 text-xs font-medium text-white">Save</button>
+                <textarea value={syllabus} onChange={(e) => setSyllabus(e.target.value)} rows={6} placeholder="Curriculum / reference (markdown)…" className="w-full resize-none rounded-md border border-input bg-card shadow-xs px-2.5 py-2 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />
+                <button onClick={() => { void updateSection({ id: section._id, syllabus }); setEditSyl(false); }} className={cn(buttonVariants({ size: "sm" }), "mt-2")}>Save</button>
               </div>
             ) : section.syllabus ? (
               <div className="prose-sm rounded-lg border border-border bg-muted/20 p-3 text-sm"><MarkdownLite text={section.syllabus} /></div>
@@ -371,7 +474,7 @@ function SectionManager({ section, index, count, focusHours, tasksDone, tasksTot
 
 type DayData = NonNullable<FunctionReturnType<typeof api.challengeDays.dayData>>;
 
-function DayView({ dayId, challengeId }: { dayId: Id<"challengeDays">; challengeId: Id<"challenges"> }) {
+function DayView({ dayId, challengeId, onGone }: { dayId: Id<"challengeDays">; challengeId: Id<"challenges">; onGone: () => void }) {
   const data = useQuery(api.challengeDays.dayData, { dayId });
   const structure = useQuery(api.challengeSections.structure, { challengeId }) as StructSection[] | undefined;
   const rename = useMutation(api.challengeDays.rename);
@@ -389,10 +492,18 @@ function DayView({ dayId, challengeId }: { dayId: Id<"challengeDays">; challenge
     window.history.replaceState(null, "", url.toString());
   }, [tab]);
 
-  if (!data || !structure) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl border border-border bg-card" /></div>;
+  // null = the day was deleted (or a stale ?v= link) — don't skeleton forever.
+  if (data === null)
+    return (
+      <div className="p-6">
+        <p className="text-sm text-muted-foreground">This day no longer exists.</p>
+        <button onClick={onGone} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3")}>Back to overview</button>
+      </div>
+    );
+  if (!data || !structure) return <div className="p-6"><div className="h-40 animate-pulse rounded-xl border border-border bg-card shadow-card" /></div>;
 
   const section = tab === "overview" ? null : structure.find((s) => s._id === tab);
-  const tabCls = (active: boolean) => cn("flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium", active ? "border-sprint text-foreground" : "border-transparent text-muted-foreground hover:text-foreground");
+  const tabCls = (active: boolean) => cn("flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground");
 
   return (
     <div className="p-4 sm:p-6">
@@ -400,7 +511,7 @@ function DayView({ dayId, challengeId }: { dayId: Id<"challengeDays">; challenge
       <input
         defaultValue={data.day.name}
         onBlur={(e) => e.target.value.trim() && e.target.value !== data.day.name && rename({ id: dayId, name: e.target.value.trim() })}
-        className="mt-3 w-full bg-transparent text-2xl font-bold tracking-tight outline-none"
+        className="mt-3 w-full bg-transparent text-2xl font-semibold tracking-tight outline-none"
       />
       <p className="text-xs text-muted-foreground">{data.day.date}</p>
 
@@ -468,7 +579,7 @@ function DayOverview({ dayId, data, structure }: { dayId: Id<"challengeDays">; d
           <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-sprint" /> Habits</h3>
           <div className="flex flex-wrap gap-2">
             {data.habits.map((h) => (
-              <button key={h._id} onClick={() => void toggleHabit({ dayId, habitId: h._id })} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs", h.done ? "border-transparent bg-sprint text-white" : "border-border text-muted-foreground hover:text-foreground")}>
+              <button key={h._id} onClick={() => void toggleHabit({ dayId, habitId: h._id })} className={cn("flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs", h.done ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
                 {h.done && <Check className="h-3 w-3" />} {h.title}
               </button>
             ))}
@@ -526,7 +637,7 @@ function DayOverview({ dayId, data, structure }: { dayId: Id<"challengeDays">; d
 
 function HealthCard({ dayId, initial }: { dayId: Id<"challengeDays">; initial?: DayData["day"]["health"] }) {
   const save = useMutation(api.challengeDays.setHealth);
-  const box = "w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-sprint/60";
+  const box = "w-full rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30";
   const numOr = (v: string) => (v === "" ? undefined : Number(v));
   return (
     <Card>
@@ -536,13 +647,13 @@ function HealthCard({ dayId, initial }: { dayId: Id<"challengeDays">; initial?: 
           <input type="number" step="0.1" defaultValue={initial?.sleepDuration ?? ""} onBlur={(e) => save({ dayId, sleepDuration: numOr(e.target.value) })} className={box} />
         </Labeled>
         <Labeled label="Time awake">
-          <input type="time" defaultValue={initial?.timeAwake ?? ""} onBlur={(e) => save({ dayId, timeAwake: e.target.value || undefined })} className={cn(box, "[color-scheme:dark]")} />
+          <input type="time" defaultValue={initial?.timeAwake ?? ""} onBlur={(e) => save({ dayId, timeAwake: e.target.value || undefined })} className={cn(box)} />
         </Labeled>
         <Labeled label="Time in bed">
-          <input type="time" defaultValue={initial?.timeInBed ?? ""} onBlur={(e) => save({ dayId, timeInBed: e.target.value || undefined })} className={cn(box, "[color-scheme:dark]")} />
+          <input type="time" defaultValue={initial?.timeInBed ?? ""} onBlur={(e) => save({ dayId, timeInBed: e.target.value || undefined })} className={cn(box)} />
         </Labeled>
         <Labeled label="Cheat meal (bad)">
-          <button onClick={() => save({ dayId, cheatMeal: !initial?.cheatMeal })} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm", initial?.cheatMeal ? "border-red-500 bg-red-500/15 font-medium text-red-400" : "border-border text-muted-foreground")}>{initial?.cheatMeal ? <><X className="h-4 w-4" /> Yes</> : "No"}</button>
+          <button onClick={() => save({ dayId, cheatMeal: !initial?.cheatMeal })} className={cn("flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm", initial?.cheatMeal ? "border-danger bg-danger-soft font-medium text-danger" : "border-border text-muted-foreground")}>{initial?.cheatMeal ? <><X className="h-4 w-4" /> Yes</> : "No"}</button>
         </Labeled>
       </div>
     </Card>
@@ -628,7 +739,7 @@ function SleepChart({ series }: { series: { date: string; value: number }[] }) {
             max={maxStart}
             value={s0}
             onChange={(e) => setStart(Number(e.target.value))}
-            className="h-1 flex-1 cursor-pointer accent-sprint"
+            className="h-1 flex-1 cursor-pointer accent-primary"
           />
           <span className="text-[10px] text-muted-foreground">{dm(view[view.length - 1].date)}</span>
         </div>
@@ -639,12 +750,12 @@ function SleepChart({ series }: { series: { date: string; value: number }[] }) {
 
 function HealthTracker({ challengeId }: { challengeId: Id<"challenges"> }) {
   const data = useQuery(api.challengeDays.health, { challengeId });
-  if (!data) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl border border-border bg-card" /></div>;
+  if (!data) return <div className="p-6"><div className="h-40 animate-pulse rounded-xl border border-border bg-card shadow-card" /></div>;
   const a = data.averages;
 
   return (
     <div className="p-4 sm:p-6">
-      <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight"><Activity className="h-5 w-5 text-sprint" /> Health Tracker</h1>
+      <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight"><Activity className="h-5 w-5 text-sprint" /> Health Tracker</h1>
 
       {/* Big average cards + sleep graph */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -677,7 +788,7 @@ function HealthTracker({ challengeId }: { challengeId: Id<"challenges"> }) {
                 <td className="py-2 pr-3">{r.health.sleepDuration ?? "—"}</td>
                 <td className="py-2 pr-3">{r.health.timeAwake ?? "—"}</td>
                 <td className="py-2 pr-3">{r.health.timeInBed ?? "—"}</td>
-                <td className="py-2">{r.health.cheatMeal ? <span className="flex items-center gap-1 font-medium text-red-400"><X className="h-3.5 w-3.5" /> Yes</span> : <span className="text-muted-foreground">—</span>}</td>
+                <td className="py-2">{r.health.cheatMeal ? <span className="flex items-center gap-1 font-medium text-danger"><X className="h-3.5 w-3.5" /> Yes</span> : <span className="text-muted-foreground">—</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -691,7 +802,7 @@ function BigStat({ icon, label, value }: { icon: React.ReactNode; label: string;
   return (
     <Card>
       <div className="flex items-center justify-between text-xs text-muted-foreground">{label}<span>{icon}</span></div>
-      <div className="mt-1 text-4xl font-bold tracking-tight text-sprint">{value}</div>
+      <div className="mt-1 text-4xl font-semibold tracking-tight text-sprint">{value}</div>
     </Card>
   );
 }
@@ -704,7 +815,7 @@ function JournalCard({ dayId, initial }: { dayId: Id<"challengeDays">; initial?:
   const [lessons, setLessons] = useState(initial?.lessons ?? "");
   const [energy, setEnergy] = useState(initial?.energy ?? 0);
 
-  const box = "w-full resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-sprint/60";
+  const box = "w-full resize-none rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30";
 
   return (
     <Card>
@@ -730,7 +841,7 @@ function JournalCard({ dayId, initial }: { dayId: Id<"challengeDays">; initial?:
       <div className="mt-4 flex items-center gap-3">
         <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground"><Zap className="h-3.5 w-3.5" /> Energy</span>
         {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} onClick={() => { const v = n === energy ? 0 : n; setEnergy(v); void save({ dayId, energy: v }); }} className={cn("h-8 w-8 rounded-full text-xs font-medium transition", n <= energy ? "bg-sprint text-white" : "border border-border text-muted-foreground hover:text-foreground")}>{n}</button>
+          <button key={n} onClick={() => { const v = n === energy ? 0 : n; setEnergy(v); void save({ dayId, energy: v }); }} className={cn("h-8 w-8 rounded-full text-xs font-medium transition", n <= energy ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:text-foreground")}>{n}</button>
         ))}
       </div>
     </Card>
@@ -739,7 +850,7 @@ function JournalCard({ dayId, initial }: { dayId: Id<"challengeDays">; initial?:
 
 /* --------- Section panel inside a day: tasks + KPI values + reference --------- */
 
-type DayTask = { _id: Id<"tasks">; title: string; status: string; sectionId?: Id<"challengeSections">; focusSeconds: number };
+type DayTask = { _id: Id<"tasks">; title: string; status: string; sectionId?: Id<"challengeSections">; focusSeconds: number; lifeAreaId?: Id<"lifeAreas"> };
 type KpiVal = { kpiDefId: Id<"challengeKpiDefs">; num?: number; bool?: boolean; text?: string };
 
 function SectionPanel({ dayId, section, tasks, kpiValues }: { dayId: Id<"challengeDays">; section: StructSection; tasks: DayTask[]; kpiValues: KpiVal[] }) {
@@ -748,6 +859,7 @@ function SectionPanel({ dayId, section, tasks, kpiValues }: { dayId: Id<"challen
   const removeTask = useMutation(api.challengeDays.removeTask);
   const setKpi = useMutation(api.challengeDays.setKpiValue);
   const timer = useFocusTimer();
+  const today = useToday();
 
   const [newTask, setNewTask] = useState("");
   const [showRef, setShowRef] = useState(false);
@@ -766,22 +878,22 @@ function SectionPanel({ dayId, section, tasks, kpiValues }: { dayId: Id<"challen
               const running = timer.active && timer.taskId === t._id;
               return (
                 <div key={t._id} className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-2.5 py-2">
-                  <button onClick={() => void toggleTask({ taskId: t._id })} className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", t.status === "done" ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
+                  <button onClick={() => void toggleTask({ taskId: t._id, date: today })} aria-label={t.status === "done" ? "Mark not done" : "Mark done"} className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", t.status === "done" ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
                     {t.status === "done" && <Check className="h-3 w-3" />}
                   </button>
                   <button onClick={() => setSelectedTask(t._id)} className={cn("min-w-0 flex-1 truncate text-left text-sm hover:text-sprint", t.status === "done" && "text-muted-foreground line-through")}>{t.title}</button>
                   {t.focusSeconds > 0 && <span className="text-[11px] text-muted-foreground">{fmtDur(t.focusSeconds)}</span>}
-                  <button onClick={() => timer.startFocus({ type: "stopwatch", taskId: t._id, taskTitle: t.title })} title="Start focus timer" className={cn("flex h-7 w-7 items-center justify-center rounded-full border", running ? "border-sprint bg-sprint/10 text-sprint" : "border-border text-muted-foreground hover:text-foreground")}>
+                  <button onClick={() => timer.startFocus({ type: "stopwatch", taskId: t._id, taskTitle: t.title, areaId: t.lifeAreaId })} title="Start focus timer" aria-label="Start focus timer" className={cn("flex h-7 w-7 items-center justify-center rounded-lg border", running ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>
                     <Timer className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={() => void removeTask({ taskId: t._id })} className="text-muted-foreground hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => void removeTask({ taskId: t._id, date: today })} aria-label="Remove task" className="text-muted-foreground hover:text-danger"><X className="h-3.5 w-3.5" /></button>
                 </div>
               );
             })}
           </div>
           <div className="mt-3 flex gap-2">
-            <input value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newTask.trim()) { void addTask({ dayId, sectionId: section._id, title: newTask.trim() }); setNewTask(""); } }} placeholder="Add a task…" className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-sprint/60" />
-            <button onClick={() => { if (newTask.trim()) { void addTask({ dayId, sectionId: section._id, title: newTask.trim() }); setNewTask(""); } }} className="rounded-lg bg-sprint px-3 py-2 text-sm font-medium text-white"><Plus className="h-4 w-4" /></button>
+            <input value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newTask.trim()) { void addTask({ dayId, sectionId: section._id, title: newTask.trim() }); setNewTask(""); } }} placeholder="Add a task…" className="flex-1 rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />
+            <button onClick={() => { if (newTask.trim()) { void addTask({ dayId, sectionId: section._id, title: newTask.trim() }); setNewTask(""); } }} className={buttonVariants({ size: "icon" })}><Plus className="h-4 w-4" /></button>
           </div>
         </Card>
 
@@ -794,10 +906,10 @@ function SectionPanel({ dayId, section, tasks, kpiValues }: { dayId: Id<"challen
                 return (
                   <div key={k._id} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm">{k.name}{k.unit ? <span className="text-muted-foreground"> ({k.unit})</span> : null}</span>
-                    {k.type === "number" && <input type="number" defaultValue={val?.num ?? ""} onBlur={(e) => setKpi({ dayId, kpiDefId: k._id, num: e.target.value === "" ? undefined : Number(e.target.value) })} className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm outline-none" />}
+                    {k.type === "number" && <input type="number" defaultValue={val?.num ?? ""} onBlur={(e) => setKpi({ dayId, kpiDefId: k._id, num: e.target.value === "" ? undefined : Number(e.target.value) })} className="w-24 rounded-md border border-input bg-card shadow-xs px-2 py-1.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />}
                     {k.type === "number" && k.target != null && <span className="text-xs text-muted-foreground">/ {k.target}</span>}
                     {k.type === "checkbox" && <button onClick={() => setKpi({ dayId, kpiDefId: k._id, bool: !val?.bool })} className={cn("flex h-7 w-7 items-center justify-center rounded-full border", val?.bool ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{val?.bool && <Check className="h-3.5 w-3.5" />}</button>}
-                    {k.type === "text" && <input defaultValue={val?.text ?? ""} onBlur={(e) => setKpi({ dayId, kpiDefId: k._id, text: e.target.value || undefined })} className="w-40 rounded-lg border border-border bg-card px-2 py-1.5 text-sm outline-none" />}
+                    {k.type === "text" && <input defaultValue={val?.text ?? ""} onBlur={(e) => setKpi({ dayId, kpiDefId: k._id, text: e.target.value || undefined })} className="w-40 rounded-md border border-input bg-card shadow-xs px-2 py-1.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30" />}
                   </div>
                 );
               })}
@@ -858,7 +970,7 @@ function fmtKpi(type: KpiType, v: { num?: number; bool?: boolean; text?: string 
 
 function DaysTable({ challengeId }: { challengeId: Id<"challenges"> }) {
   const data = useQuery(api.challengeDays.daysTable, { challengeId });
-  if (!data) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl border border-border bg-card" /></div>;
+  if (!data) return <div className="p-6"><div className="h-40 animate-pulse rounded-xl border border-border bg-card shadow-card" /></div>;
 
   const th = "whitespace-nowrap px-3 py-2 text-left font-medium";
   const td = "whitespace-nowrap border-b border-border px-3 py-2";
@@ -870,7 +982,7 @@ function DaysTable({ challengeId }: { challengeId: Id<"challenges"> }) {
 
   return (
     <div className="p-4 sm:p-6">
-      <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight"><Table className="h-5 w-5 text-sprint" /> Days table</h1>
+      <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight"><Table className="h-5 w-5 text-sprint" /> Days table</h1>
       <p className="mt-1 text-sm text-muted-foreground">Every day and all its key metrics, side by side.</p>
 
       <Card className="mt-4 max-h-[70vh] overflow-auto p-0">
@@ -910,9 +1022,9 @@ function DaysTable({ challengeId }: { challengeId: Id<"challenges"> }) {
                 <td className={td}>{r.sleep ?? "—"}</td>
                 <td className={td}>{r.wakeUp ?? "—"}</td>
                 <td className={td}>{r.bedtime ?? "—"}</td>
-                <td className={td}>{r.cheatMeal ? <span className="flex items-center gap-1 font-medium text-red-400"><X className="h-3.5 w-3.5" /> Yes</span> : <span className="text-muted-foreground">—</span>}</td>
+                <td className={td}>{r.cheatMeal ? <span className="flex items-center gap-1 font-medium text-danger"><X className="h-3.5 w-3.5" /> Yes</span> : <span className="text-muted-foreground">—</span>}</td>
                 {data.habitCols.map((h) => (
-                  <td key={h._id} className={cn(td, "text-center")}>{r.habitDone[h._id] ? <Check className="mx-auto h-4 w-4 text-emerald-500" /> : <span className="text-muted-foreground">—</span>}</td>
+                  <td key={h._id} className={cn(td, "text-center")}>{r.habitDone[h._id] ? <Check className="mx-auto h-4 w-4 text-success" /> : <span className="text-muted-foreground">—</span>}</td>
                 ))}
                 {data.kpiCols.map((k) => {
                   const cell = r.kpi[k._id];

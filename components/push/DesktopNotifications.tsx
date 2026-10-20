@@ -132,14 +132,14 @@ export function DesktopNotifications() {
             disabled={busy}
             className={cn(
               "relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50",
-              on ? "bg-primary" : "bg-muted",
+              on ? "bg-primary" : "bg-input",
             )}
             aria-pressed={on}
           >
             <span
               className={cn(
-                "absolute top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white transition-all",
-                on ? "left-[1.375rem]" : "left-0.5",
+                "absolute top-0.5 flex h-5 w-5 items-center justify-center rounded-full shadow-sm transition-all",
+                on ? "left-[1.375rem] bg-primary-foreground" : "left-0.5 bg-white",
               )}
             >
               {busy && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}

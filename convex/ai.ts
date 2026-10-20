@@ -72,8 +72,57 @@ export const gatherContext = internalQuery({
       .filter((t) => t.dueDate != null && t.dueDate <= now + 7 * DAY)
       .sort((a, b) => (a.dueDate ?? 0) - (b.dueDate ?? 0));
 
+    // ── Life OS layers (compass, cycle, week, today, founder engines, learning) ──
+    const [compass, cycles, weekPlans, days, deals, commitments, content, learningAreas, inboxOpen] = await Promise.all([
+      ctx.db.query("compass").withIndex("by_user", (q) => q.eq("userId", userId)).first(),
+      ctx.db.query("cycles").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("weekPlans").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").take(1),
+      // By DATE, not creation order (the Ideal Week creates future dayType-only rows).
+      ctx.db
+        .query("days")
+        .withIndex("by_user_date", (q) => q.eq("userId", userId).lte("date", ymd(now + DAY)))
+        .order("desc")
+        .take(7),
+      ctx.db.query("deals").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("commitments").withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "open")).collect(),
+      ctx.db.query("contentPieces").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("learningAreas").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("inbox").withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "open")).collect(),
+    ]);
+    const todayYmd = ymd(now);
+    const activeCycle = cycles
+      .filter((c) => c.status !== "done" && c.startDate <= todayYmd)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
+    const cycleGoals = activeCycle ? goals.filter((g) => g.cycleId === activeCycle._id && (g.goalStatus ?? "active") === "active") : [];
+    const lastDay = days.find((d) => d.startupAt || d.shutdownAt || d.checkIn || d.intention || d.progressLine) ?? days[0];
+    const openDeals = deals.filter((d) => !["won", "lost", "unqualified"].includes(d.stage));
+    const lifeOs = [
+      compass?.purpose ? `PURPOSE: ${compass.purpose}` : "",
+      compass?.values?.length ? `VALUES: ${compass.values.join(", ")}` : "",
+      compass?.yearTheme ? `YEAR THEME: ${compass.yearTheme}` : "",
+      activeCycle
+        ? `12-WEEK CYCLE "${activeCycle.name}" (started ${activeCycle.startDate}): ` +
+          cycleGoals
+            .map((g) => `${g.title}${g.keyResults?.length ? ` [KR: ${g.keyResults.map((k) => `${k.title} ${k.current}/${k.target}${k.unit}`).join("; ")}]` : ""}`)
+            .join(" | ")
+        : "No active 12-week cycle.",
+      weekPlans[0]?.big3.length ? `WEEKLY BIG 3 (${weekPlans[0].weekStart}): ${weekPlans[0].big3.map((b) => `${b.text}${b.done ? " ✓" : ""}`).join("; ")}` : "",
+      lastDay
+        ? `LATEST DAY (${lastDay.date}): ${lastDay.startupAt ? "start-up done" : "no start-up"}, ${lastDay.shutdownAt ? "shutdown done" : "no shutdown"}${lastDay.checkIn?.energy ? `, energy ${lastDay.checkIn.energy}/5` : ""}${lastDay.checkIn?.sleepHours ? `, slept ${lastDay.checkIn.sleepHours}h` : ""}${lastDay.intention ? `, intention "${lastDay.intention}"` : ""}${lastDay.progressLine ? `, progress: ${lastDay.progressLine}` : ""}.`
+        : "",
+      `PIPELINE: ${openDeals.length} open deals worth ${openDeals.reduce((s, d) => s + (d.value ?? 0), 0)} — ` +
+        openDeals.slice(0, 8).map((d) => `${d.title} [${d.stage}${d.nextStep ? `, next: ${d.nextStep} ${d.nextStepDate ?? ""}` : ", NO next step"}]`).join("; "),
+      `COMMITMENTS: I owe — ${commitments.filter((c) => c.direction === "i_owe").map((c) => `${c.title}${c.promisedDate ? ` (by ${c.promisedDate})` : ""}`).join("; ") || "none"}; waiting for — ${commitments.filter((c) => c.direction === "owed_to_me").map((c) => c.title).join("; ") || "none"}.`,
+      `CONTENT: ${content.filter((c) => c.stage === "idea" || c.stage === "seed").length} ideas, ${content.filter((c) => ["brief", "script", "ready_to_record", "recorded", "editing", "ready_to_publish", "scheduled"].includes(c.stage)).length} in production, ${content.filter((c) => c.publishedAt).length} published.`,
+      learningAreas.length ? `LEARNING: ${learningAreas.filter((l) => l.status === "active").map((l) => `${l.name}${l.targetPerformance ? ` (target: ${l.targetPerformance})` : ""}`).join("; ")}` : "",
+      `INBOX: ${inboxOpen.length} items to process.`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     return [
       `=== WHO YOU'RE TALKING TO (profile) ===\n${profileStr}`,
+      `=== LIFE OS ===\n${lifeOs}`,
       `LIFE AREAS: ${areas.map((a) => a.name).join(", ") || "none"}.`,
       `TODAY'S TASKS (${open.length} open): ` +
         open.slice(0, 15).map((t) => `[${t.priority}] ${t.title} (${areaName(t.lifeAreaId)})`).join("; "),
@@ -158,8 +207,9 @@ export const createTurn = internalMutation({
     attachments: v.optional(v.array(attachmentMeta)),
   },
   handler: async (ctx, { threadId, userMessage, attachments }) => {
+    const userId = await requireUser(ctx); // auth is inherited from the calling action
     const thread = await ctx.db.get(threadId);
-    if (!thread) throw new Error("Thread not found");
+    if (!thread || thread.userId !== userId) throw new Error("Thread not found");
     await ctx.db.insert("aiMessages", {
       userId: thread.userId,
       threadId,
@@ -174,8 +224,9 @@ export const createTurn = internalMutation({
 export const createAssistant = internalMutation({
   args: { threadId: v.id("aiThreads") },
   handler: async (ctx, { threadId }) => {
+    const userId = await requireUser(ctx);
     const thread = await ctx.db.get(threadId);
-    if (!thread) throw new Error("Thread not found");
+    if (!thread || thread.userId !== userId) throw new Error("Thread not found");
     return ctx.db.insert("aiMessages", { userId: thread.userId, threadId, role: "assistant", content: "", streaming: true });
   },
 });
@@ -223,6 +274,9 @@ export const historyMessages = internalQuery({
 export const deleteLastAssistant = internalMutation({
   args: { threadId: v.id("aiThreads") },
   handler: async (ctx, { threadId }) => {
+    const userId = await requireUser(ctx);
+    const thread = await ctx.db.get(threadId);
+    if (!thread || thread.userId !== userId) throw new Error("Thread not found");
     const msgs = await ctx.db.query("aiMessages").withIndex("by_thread", (q) => q.eq("threadId", threadId)).collect();
     const last = msgs[msgs.length - 1];
     if (last && last.role === "assistant") await ctx.db.delete(last._id);
@@ -233,10 +287,19 @@ export const deleteLastAssistant = internalMutation({
 export const stopStream = mutation({
   args: { messageId: v.id("aiMessages") },
   handler: async (ctx, { messageId }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    const msg = await ctx.db.get(messageId);
+    if (!msg || msg.userId !== userId) return;
     await ctx.db.patch(messageId, { streaming: false });
   },
 });
+
+/**
+ * Model for a /chat thread. Matches what the chat UI shows as active: a thread
+ * with no stored model (e.g. made by "New chat") or the retired "perplexity"
+ * value uses the default, Hunyuan HY3 — not the background AI_PROVIDER.
+ */
+const chatProvider = (p?: string | null) => (p && p !== "perplexity" ? p : "hy3");
 
 /** Stream an assistant reply into an existing message doc; returns the final text. */
 async function streamAssistant(
@@ -377,7 +440,7 @@ export const chat = action({
       };
     }
 
-    return streamAssistant(ctx, assistantId, messages, provider ?? undefined);
+    return streamAssistant(ctx, assistantId, messages, chatProvider(provider));
   },
 });
 
@@ -395,7 +458,7 @@ export const regenerate = action({
       ctx,
       assistantId,
       [{ role: "system", content: buildSystemPrompt(context, "") }, ...history],
-      provider ?? undefined,
+      chatProvider(provider),
     );
   },
 });

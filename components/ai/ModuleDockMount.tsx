@@ -11,7 +11,6 @@ const ROUTES: { prefix: string; module: string }[] = [
   { prefix: "/projects", module: "projects" },
   { prefix: "/habits", module: "habits" },
   { prefix: "/focus", module: "focus" },
-  { prefix: "/check-in", module: "checkin" },
 ];
 
 /** Renders the right module dock for the current route (or nothing). Mounted

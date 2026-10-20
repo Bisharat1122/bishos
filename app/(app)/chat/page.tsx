@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -14,7 +14,9 @@ import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AiDots } from "@/components/Skeleton";
 import { SaveToNotesModal } from "@/components/chat/SaveToNotesModal";
 import { extractFileText } from "@/lib/extractFile";
+import { toast, errorMessage } from "@/components/os/celebrate";
 import { cn } from "@/lib/utils";
+import { buttonVariants, inputClass } from "@/lib/variants";
 
 const CTX_ICON = { project: FolderKanban, note: StickyNote, lifeArea: Layers } as const;
 
@@ -66,11 +68,15 @@ export default function ChatPage() {
 
   // "/" at the start of the input opens the context picker
   const slashQuery = input.startsWith("/") ? input.slice(1).toLowerCase() : null;
-  const contextItems: Ref[] = [
-    ...(projects ?? []).map((p) => ({ type: "project" as const, id: p._id, label: p.title })),
-    ...(notes ?? []).map((n) => ({ type: "note" as const, id: n._id, label: n.title })),
-    ...(areas ?? []).map((a) => ({ type: "lifeArea" as const, id: a._id, label: a.name })),
-  ];
+  // Memoized: the page re-renders on every keystroke / streamed token.
+  const contextItems = useMemo<Ref[]>(
+    () => [
+      ...(projects ?? []).map((p) => ({ type: "project" as const, id: p._id, label: p.title })),
+      ...(notes ?? []).map((n) => ({ type: "note" as const, id: n._id, label: n.title })),
+      ...(areas ?? []).map((a) => ({ type: "lifeArea" as const, id: a._id, label: a.name })),
+    ],
+    [projects, notes, areas],
+  );
   const slashItems =
     slashQuery !== null
       ? contextItems.filter((it) => it.label.toLowerCase().includes(slashQuery)).slice(0, 8)
@@ -92,11 +98,14 @@ export default function ChatPage() {
         headers: { "Content-Type": file.type || "application/octet-stream" },
         body: file,
       });
+      if (!res.ok) throw new Error("Upload failed.");
       const { storageId } = await res.json();
       setAttachments((a) => [
         ...a,
-        { name: file.name, text, storageId, contentType: file.type },
+        { name: file.name, text, storageId, contentType: file.type || "application/octet-stream" },
       ]);
+    } catch (e) {
+      toast(errorMessage(e, "Couldn't attach that file."), { tone: "warning" });
     } finally {
       setExtracting(false);
     }
@@ -135,13 +144,20 @@ export default function ChatPage() {
     if (threads && threads.length > 0 && !threadId) setThreadId(threads[0]._id);
   }, [threads, threadId]);
 
+  // Threads still loading, about to auto-select the latest one, or its messages loading.
+  const loadingChat =
+    threads === undefined ||
+    (threadId === null && threads.length > 0) ||
+    (threadId !== null && messages === undefined);
+
   const streamingMsg = messages?.find((m) => m.streaming);
   const isStreaming = Boolean(streamingMsg);
   const lastMsg = messages && messages.length > 0 ? messages[messages.length - 1] : null;
 
   async function send(text?: string) {
     const msg = (text ?? input).trim();
-    if (!msg || sending || isStreaming) return;
+    // Wait for the thread list so we continue the latest chat instead of forking a new one.
+    if (!msg || sending || isStreaming || loadingChat) return;
     if (!text && msg.startsWith("/")) return; // slash is a command, not a message
     const attachmentText = attachments
       .filter((a) => a.text.trim())
@@ -171,6 +187,10 @@ export default function ChatPage() {
         attachments: attachmentMeta.length ? attachmentMeta : undefined,
       });
       setAttachments([]);
+    } catch (e) {
+      // Give the message back so it isn't lost.
+      if (!text) setInput((cur) => cur || msg);
+      toast(errorMessage(e, "Couldn't send that message. Try again."), { tone: "warning" });
     } finally {
       setSending(false);
     }
@@ -181,21 +201,41 @@ export default function ChatPage() {
     setSending(true);
     try {
       await regenerate({ threadId });
+    } catch (e) {
+      toast(errorMessage(e, "Couldn't regenerate. Try again."), { tone: "warning" });
     } finally {
       setSending(false);
     }
   }
 
   async function newChat() {
-    const id = await createThread({});
-    setThreadId(id);
-    setHistoryOpen(false);
+    try {
+      const id = await createThread({});
+      // Carry over the model picked before the first thread existed.
+      await setProvider({ threadId: id, provider: activeProvider });
+      setThreadId(id);
+      setHistoryOpen(false);
+    } catch (e) {
+      toast(errorMessage(e, "Couldn't start a new chat."), { tone: "warning" });
+    }
+  }
+
+  async function deleteThread(id: Id<"aiThreads">, title: string) {
+    if (!confirm(`Delete “${title}”? The whole conversation is removed.`)) return;
+    try {
+      // Await first: the thread list must no longer contain it before we
+      // fall back to threads[0], or we'd re-select the deleted thread.
+      await removeThread({ threadId: id });
+      if (threadId === id) setThreadId(null);
+    } catch (e) {
+      toast(errorMessage(e, "Couldn't delete the conversation."), { tone: "warning" });
+    }
   }
 
   const ThreadList = (
     <div className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-card/30">
       <div className="p-3">
-        <button onClick={() => void newChat()} className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
+        <button onClick={() => void newChat()} className={cn(buttonVariants(), "w-full")}>
           <MessageSquarePlus className="h-4 w-4" /> New chat
         </button>
       </div>
@@ -223,7 +263,7 @@ export default function ChatPage() {
                     setEditingId(null);
                   } else if (e.key === "Escape") setEditingId(null);
                 }}
-                className="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-sm outline-none"
+                className={cn(inputClass, "h-7 flex-1 px-1.5 py-0.5")}
               />
             ) : (
               <>
@@ -232,14 +272,14 @@ export default function ChatPage() {
                 </button>
                 <button
                   onClick={() => { setEditingId(t._id); setEditTitle(t.title); }}
-                  className="text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
+                  className="text-muted-foreground transition hover:text-foreground md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                   title="Rename"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
                 <button
-                  onClick={() => { void removeThread({ threadId: t._id }); if (threadId === t._id) setThreadId(null); }}
-                  className="text-muted-foreground opacity-0 transition hover:text-warning group-hover:opacity-100"
+                  onClick={() => void deleteThread(t._id, t.title)}
+                  className="text-muted-foreground transition hover:text-danger md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                   title="Delete"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -258,20 +298,20 @@ export default function ChatPage() {
       <div className="hidden md:block">{ThreadList}</div>
       {historyOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setHistoryOpen(false)} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setHistoryOpen(false)} />
           <div className="absolute left-0 top-0 h-full">{ThreadList}</div>
         </div>
       )}
 
       <div className="flex h-full flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-4 sm:px-8">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-4 sm:px-6 lg:px-8">
           <button onClick={() => setHistoryOpen(true)} className="md:hidden"><PanelLeft className="h-5 w-5" /></button>
           <Sparkles className="h-5 w-5 text-primary" />
           <h1 className="hidden font-semibold sm:block">AI Chat</h1>
 
           <div className="ml-auto flex items-center gap-2">
             {/* per-conversation model toggle */}
-            <div className="flex rounded-full border border-border p-0.5 text-xs">
+            <div className="inline-flex items-center rounded-lg bg-muted p-[3px] text-xs text-muted-foreground">
               {MODEL_CHIPS.map((m) => {
                 const active = activeProvider === m.key;
                 return (
@@ -280,9 +320,9 @@ export default function ChatPage() {
                     onClick={() => chooseProvider(m.key)}
                     title={m.title}
                     className={cn(
-                      "flex items-center gap-1 rounded-full px-2.5 py-1 font-medium transition",
+                      "flex items-center gap-1 rounded-md px-3 py-1 font-medium transition-colors",
                       active
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-card text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -290,7 +330,7 @@ export default function ChatPage() {
                     <span
                       className={cn(
                         "rounded px-1 text-[9px]",
-                        active ? "bg-primary-foreground/20" : "bg-muted",
+                        active ? "bg-muted" : "bg-foreground/10",
                       )}
                     >
                       {m.tag}
@@ -301,7 +341,7 @@ export default function ChatPage() {
             </div>
             {contextTokens > 0 && (
               <span
-                className="hidden rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground lg:inline"
+                className="hidden rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground lg:inline"
                 title="Approximate tokens of this conversation kept in context"
               >
                 ~{contextTokens.toLocaleString()} tokens
@@ -310,15 +350,23 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-6 sm:px-8">
-          {(!messages || messages.length === 0) && (
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {/* Loading the thread list / a thread's messages: keep the layout, don't flash the welcome screen. */}
+          {loadingChat && (
+            <div className="space-y-4" aria-busy="true">
+              <div className="flex justify-end"><div className="skeleton h-10 w-1/3 rounded-xl" /></div>
+              <div className="flex justify-start"><div className="skeleton h-24 w-2/3 rounded-xl" /></div>
+              <div className="flex justify-end"><div className="skeleton h-10 w-1/4 rounded-xl" /></div>
+            </div>
+          )}
+          {!loadingChat && (messages?.length ?? 0) === 0 && (
             <div className="mx-auto max-w-lg pt-16 text-center">
               <Sparkles className="mx-auto mb-3 h-8 w-8 text-primary" />
               <p className="font-medium">Ask me anything about your life.</p>
               <p className="mt-1 text-sm text-muted-foreground">I know your tasks, projects, goals, focus, habits, notes and check-ins.</p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {QUICK.map((q) => (
-                  <button key={q} onClick={() => void send(q)} className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/60 hover:text-foreground">
+                  <button key={q} onClick={() => void send(q)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-xs hover:bg-accent hover:text-foreground">
                     {q}
                   </button>
                 ))}
@@ -332,7 +380,7 @@ export default function ChatPage() {
                 <div className="max-w-[75%]">
                   <div
                     className={cn(
-                      "rounded-2xl px-4 py-3 text-sm",
+                      "rounded-xl px-4 py-3 text-sm",
                       m.role === "user"
                         ? "whitespace-pre-wrap bg-primary text-primary-foreground"
                         : "border border-border bg-card",
@@ -383,14 +431,14 @@ export default function ChatPage() {
           })}
           {sending && !isStreaming && (
             <div className="flex justify-start">
-              <div className="rounded-2xl border border-border bg-card px-4 py-3">
+              <div className="rounded-xl border border-border bg-card shadow-card px-4 py-3">
                 <AiDots />
               </div>
             </div>
           )}
         </div>
 
-        <div className="relative border-t border-border px-4 py-4 sm:px-8">
+        <div className="relative border-t border-border px-4 py-4 sm:px-6 lg:px-8">
           <input
             ref={fileRef}
             type="file"
@@ -407,13 +455,13 @@ export default function ChatPage() {
           {(ref || attachments.length > 0 || extracting) && (
             <div className="mb-2 flex flex-wrap items-center gap-2">
               {extracting && (
-                <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Reading file…
                 </span>
               )}
               {ref && (
-                <span className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs text-primary">
+                <span className="flex items-center gap-1.5 rounded-md bg-primary/15 px-3 py-1 text-xs text-primary">
                   {(() => {
                     const I = CTX_ICON[ref.type];
                     return <I className="h-3 w-3" />;
@@ -423,7 +471,7 @@ export default function ChatPage() {
                 </span>
               )}
               {attachments.map((a, i) => (
-                <span key={i} className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                <span key={i} className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground">
                   <FileText className="h-3 w-3" />
                   {a.name}
                   {a.text.trim() ? (
@@ -441,7 +489,7 @@ export default function ChatPage() {
 
           {/* slash context menu */}
           {slashQuery !== null && slashItems.length > 0 && (
-            <div className="absolute bottom-20 left-4 z-20 max-h-72 w-80 overflow-y-auto rounded-xl border border-border bg-card shadow-xl sm:left-8">
+            <div className="absolute bottom-20 left-4 z-20 max-h-72 w-80 overflow-y-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-raised sm:left-8">
               <p className="border-b border-border px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                 Attach context
               </p>
@@ -451,7 +499,7 @@ export default function ChatPage() {
                   <button
                     key={`${it.type}-${it.id}`}
                     onClick={() => pickContext(it)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     <I className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{it.label}</span>
@@ -464,11 +512,11 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-2xl border border-border bg-muted/30 px-3 py-2">
+          <div className="flex items-end gap-2 rounded-xl border border-input bg-card px-3 py-2 shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30">
             <button
               onClick={() => fileRef.current?.click()}
               title="Attach a document (PDF, Word, PowerPoint, Excel, text) for the AI to analyze"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               {extracting ? (
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -494,11 +542,11 @@ export default function ChatPage() {
               className="flex-1 bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground"
             />
             {isStreaming && streamingMsg ? (
-              <button onClick={() => void stopStream({ messageId: streamingMsg._id })} title="Stop" className="flex h-9 w-9 items-center justify-center rounded-full bg-warning text-background">
+              <button onClick={() => void stopStream({ messageId: streamingMsg._id })} title="Stop" className={buttonVariants({ variant: "destructive", size: "icon" })}>
                 <Square className="h-4 w-4" />
               </button>
             ) : (
-              <button onClick={() => void send()} disabled={sending} className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50">
+              <button onClick={() => void send()} disabled={sending} className={buttonVariants({ size: "icon" })}>
                 <Send className="h-4 w-4" />
               </button>
             )}
@@ -524,7 +572,7 @@ function AttachmentDownload({
       href={url ?? "#"}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:text-primary"
+      className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
     >
       <FileText className="h-3 w-3" />
       <span className="max-w-[12rem] truncate">{att.name}</span>

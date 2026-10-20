@@ -7,6 +7,9 @@ import { Doc, Id } from "@/convex/_generated/dataModel";
 import { Trash2, Check, Ban, Repeat } from "lucide-react";
 import { Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { buttonVariants, inputClass } from "@/lib/variants";
+import { toast, errorMessage } from "@/components/os/celebrate";
+import { useTz, BLOCK_TYPES, BLOCK_TYPE_KEYS, type BlockType } from "@/components/direction/util";
 
 /** Local YYYY-MM-DD (matches the server-side helper in convex/schedule.ts). */
 export function ymdLocal(d: Date): string {
@@ -48,7 +51,13 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
   const [goalId, setGoalId] = useState<string>(b?.goalId ?? "");
   const [taskId, setTaskId] = useState<string>(b?.taskId ?? "");
   const [notes, setNotes] = useState(b?.notes ?? "");
+  const [blockType, setBlockType] = useState<BlockType | "">(b?.blockType ?? "");
   const [busy, setBusy] = useState(false);
+  // `b` is a snapshot from when the modal opened — track status locally so the
+  // planned/done/skipped toggle reflects the click immediately.
+  const [status, setStatusLocal] = useState(b?.status ?? "planned");
+  const tz = useTz();
+  const badTime = timeToMin(end) <= timeToMin(start);
 
   // recurrence (create only)
   const [recurrence, setRecurrence] = useState<"none" | "daily" | "weekly">("none");
@@ -66,7 +75,7 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
   }
 
   async function save() {
-    if (busy) return;
+    if (busy || badTime) return;
     setBusy(true);
     try {
       const links = {
@@ -86,7 +95,8 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
           projectId: links.projectId ?? null,
           goalId: links.goalId ?? null,
           lifeAreaId: links.lifeAreaId ?? null,
-          notes: notes.trim() || undefined,
+          notes: notes.trim(), // "" clears the notes
+          blockType: blockType || null,
         });
       } else {
         await createBlock({
@@ -99,15 +109,42 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
           recurrence: recurrence === "none" ? undefined : recurrence,
           weekdays: recurrence === "weekly" && weekdays.length ? weekdays : undefined,
           untilDate: until || undefined,
+          blockType: blockType || undefined,
         });
       }
       onClose();
+    } catch (e) {
+      toast(errorMessage(e), { tone: "warning" });
     } finally {
       setBusy(false);
     }
   }
 
-  const sel = "rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-primary/60";
+  async function changeStatus(next: "planned" | "done" | "skipped") {
+    if (!b) return;
+    const prev = status;
+    setStatusLocal(next);
+    try {
+      await setStatus({ id: b._id, status: next, tz });
+    } catch (e) {
+      setStatusLocal(prev);
+      toast(errorMessage(e), { tone: "warning" });
+    }
+  }
+
+  async function remove(all: boolean) {
+    if (!b) return;
+    if (all && !confirm("Delete this and all future occurrences in the series?")) return;
+    try {
+      if (all && b.seriesId) await removeSeries({ seriesId: b.seriesId, fromDate: b.date });
+      else await removeBlock({ id: b._id });
+      onClose();
+    } catch (e) {
+      toast(errorMessage(e), { tone: "warning" });
+    }
+  }
+
+  const sel = cn(inputClass, "py-2");
 
   return (
     <Modal title={editing ? "Edit block" : "New schedule block"} onClose={onClose}>
@@ -117,15 +154,17 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="What are you doing?"
-          className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-primary/60"
+          className="w-full rounded-md border border-input bg-card shadow-xs px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
         />
 
         {/* date + time */}
         <div className="grid grid-cols-3 gap-2">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={cn(sel, "[color-scheme:dark]")} />
-          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={cn(sel, "[color-scheme:dark]")} />
-          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={cn(sel, "[color-scheme:dark]")} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={cn(sel)} />
+          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={cn(sel)} />
+          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={cn(sel)} />
         </div>
+
+        {badTime && <p className="-mt-1 text-xs text-warning">End time must be after the start time.</p>}
 
         {/* interlinks */}
         <div className="grid grid-cols-2 gap-2">
@@ -147,12 +186,33 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
           </select>
         </div>
 
+        {/* block type (maker / manager / admin / routine / free) */}
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Block type">
+          <span className="mr-1 text-xs text-muted-foreground">Type</span>
+          {BLOCK_TYPE_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              title={BLOCK_TYPES[k].hint}
+              aria-pressed={blockType === k}
+              onClick={() => setBlockType((cur) => (cur === k ? "" : k))}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition",
+                blockType === k ? "border-ring bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="size-2 rounded-full" style={{ background: BLOCK_TYPES[k].color }} />
+              {BLOCK_TYPES[k].label}
+            </button>
+          ))}
+        </div>
+
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
           placeholder="Notes (optional)"
-          className="w-full resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-primary/60"
+          className="w-full resize-none rounded-md border border-input bg-card shadow-xs px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
         />
 
         {/* recurrence (create only) */}
@@ -186,7 +246,7 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
             {recurrence !== "none" && (
               <div className="mt-2 flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Until</span>
-                <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className={cn(sel, "[color-scheme:dark] py-1")} />
+                <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className={cn(sel, "py-1")} />
                 <span className="text-xs text-muted-foreground">(optional)</span>
               </div>
             )}
@@ -199,10 +259,11 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
             {(["planned", "done", "skipped"] as const).map((s) => (
               <button
                 key={s}
-                onClick={() => void setStatus({ id: b._id, status: s })}
+                type="button"
+                onClick={() => void changeStatus(s)}
                 className={cn(
-                  "flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition",
-                  b.status === s ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                  "flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium capitalize transition",
+                  status === s ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >
                 {s === "done" && <Check className="h-3.5 w-3.5" />}
@@ -211,7 +272,7 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
               </button>
             ))}
             <span className="ml-auto self-center text-[11px] text-muted-foreground">
-              {b.status === "done" ? "✓ logged as focus time" : ""}
+              {status === "done" ? "✓ logged as focus time" : ""}
             </span>
           </div>
         )}
@@ -220,16 +281,16 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
         <div className="flex items-center gap-2 pt-1">
           <button
             onClick={() => void save()}
-            disabled={busy || !date}
-            className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            disabled={busy || !date || badTime}
+            className={cn(buttonVariants(), "flex-1")}
           >
             {busy ? "Saving…" : editing ? "Save changes" : "Add to schedule"}
           </button>
           {editing && b && (
             <button
-              onClick={async () => { await removeBlock({ id: b._id }); onClose(); }}
+              onClick={() => void remove(false)}
               title="Delete block"
-              className="rounded-lg border border-border p-2.5 text-muted-foreground hover:text-destructive"
+              className={cn(buttonVariants({ variant: "outline", size: "icon" }), "text-muted-foreground hover:text-destructive")}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -237,7 +298,7 @@ export function ScheduleBlockModal({ init, onClose }: { init: Init; onClose: () 
         </div>
         {editing && b?.seriesId && (
           <button
-            onClick={async () => { await removeSeries({ seriesId: b.seriesId!, fromDate: b.date }); onClose(); }}
+            onClick={() => void remove(true)}
             className="w-full text-center text-xs text-muted-foreground hover:text-destructive"
           >
             Delete this & all future occurrences in the series

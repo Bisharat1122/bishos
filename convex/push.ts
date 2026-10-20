@@ -74,16 +74,16 @@ export const dueEvents = internalQuery({
 
     const tasks = await ctx.db.query("tasks").collect();
     const fresh: Event[] = [];
-    const consider = (key: string, time: number, title: string, body: string, userId: string) => {
-      if (time > since && time <= now) fresh.push({ userId, key, title, body, href: "/tasks" });
+    const consider = (key: string, time: number, title: string, body: string, userId: string, taskId: string) => {
+      if (time > since && time <= now) fresh.push({ userId, key, title, body, href: `/tasks/${taskId}` });
     };
     for (const t of tasks) {
       if (t.status === "done") continue;
       if (t.startAt != null) {
-        consider(`task-start-${t._id}-${t.startAt}`, t.startAt, t.title, "Starting now", t.userId);
+        consider(`task-start-${t._id}-${t.startAt}`, t.startAt, t.title, "Starting now", t.userId, t._id);
       }
       if (t.dueDate != null) {
-        consider(`task-end-${t._id}-${t.dueDate}`, t.dueDate, t.title, "Due now", t.userId);
+        consider(`task-end-${t._id}-${t.dueDate}`, t.dueDate, t.title, "Due now", t.userId, t._id);
       }
     }
 

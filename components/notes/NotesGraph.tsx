@@ -6,7 +6,7 @@ import { ZoomIn, ZoomOut, Maximize } from "lucide-react";
 
 const W = 900;
 const H = 620;
-const FALLBACK = "hsl(var(--primary))";
+const FALLBACK = "var(--chart-1)";
 const clampScale = (v: number) => Math.max(0.4, Math.min(3, v));
 
 type P = { x: number; y: number };
@@ -19,7 +19,10 @@ function computeLayout(n: number, edges: [number, number][]): P[] {
     y: H / 2 + Math.sin((i / n) * Math.PI * 2) * 200,
   }));
   const REP = 9000, SPRING = 0.02, LEN = 130;
-  for (let iter = 0; iter < 320; iter++) {
+  // The repulsion pass is O(n²) per iteration and runs synchronously during
+  // render — fewer iterations on big vaults keep the Graph tab responsive.
+  const ITERS = n > 400 ? 60 : n > 150 ? 140 : 320;
+  for (let iter = 0; iter < ITERS; iter++) {
     const fx = new Array(n).fill(0);
     const fy = new Array(n).fill(0);
     for (let i = 0; i < n; i++)
@@ -130,13 +133,13 @@ export function NotesGraph({
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card/40">
+    <div className="rounded-xl border border-border bg-card shadow-card">
       {/* toolbar */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <select
           value={areaFilter}
           onChange={(e) => setAreaFilter(e.target.value)}
-          className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs outline-none"
+          className="rounded-md border border-input bg-card shadow-xs px-2 py-1.5 text-xs outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
         >
           <option value="">All life areas</option>
           {(areas ?? []).map((a) => (
@@ -208,7 +211,7 @@ export function NotesGraph({
               <line
                 key={i}
                 x1={pos[a]?.x} y1={pos[a]?.y} x2={pos[b]?.x} y2={pos[b]?.y}
-                stroke="hsl(var(--border))"
+                stroke="var(--border)"
                 strokeWidth={hover === a || hover === b ? 2.5 : 1}
                 opacity={hover === null || hover === a || hover === b ? 0.9 : 0.2}
               />
@@ -232,7 +235,7 @@ export function NotesGraph({
                   onPointerEnter={() => setHover(i)}
                   onPointerLeave={() => setHover(null)}
                 >
-                  <circle r={hover === i ? r + 2 : r} style={{ fill: colorFor(n) }} stroke="hsl(var(--background))" strokeWidth={2} />
+                  <circle r={hover === i ? r + 2 : r} style={{ fill: colorFor(n) }} stroke="var(--card)" strokeWidth={2} />
                   <text y={r + 15} textAnchor="middle" className="pointer-events-none fill-foreground text-[12px]">
                     {n.title.length > 22 ? n.title.slice(0, 22) + "…" : n.title}
                   </text>

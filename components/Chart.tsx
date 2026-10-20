@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const PALETTE = [
-  "#84cc16", "#22c55e", "#10b981", "#14b8a6",
-  "#06b6d4", "#8b5cf6", "#f59e0b", "#ec4899",
+  "var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)",
 ];
 export function categoryColor(color: string | undefined, index: number) {
   return color || PALETTE[index % PALETTE.length];
@@ -94,7 +93,7 @@ export function BarChart({
             const y = pad.t + ch * (1 - g);
             return (
               <g key={g}>
-                <line x1={pad.l} y1={y} x2={pad.l + cw} y2={y} stroke="hsl(var(--border))" strokeWidth={1} opacity={0.5} />
+                <line x1={pad.l} y1={y} x2={pad.l + cw} y2={y} stroke="var(--border)" strokeWidth={1} />
                 <text x={pad.l - 6} y={y + 3} textAnchor="end" className="fill-muted-foreground text-[9px]">
                   {Math.round(max * g)}{unit}
                 </text>
@@ -149,7 +148,7 @@ export function BarChart({
       {/* rich tooltip */}
       {hover && hovered && (
         <div
-          className="pointer-events-none absolute z-30 w-56 rounded-xl border border-border bg-card p-3 shadow-xl"
+          className="pointer-events-none absolute z-30 w-56 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-raised"
           style={{ left: Math.min(hover.x + 12, Math.max(0, W - 232)), top: Math.max(0, hover.y - 8) }}
         >
           <p className="mb-1.5 flex items-center justify-between text-sm font-semibold">
@@ -160,9 +159,9 @@ export function BarChart({
             <div className="space-y-1">
               {hovered.items.map((it, k) => (
                 <div key={k} className="flex items-start gap-1.5 text-xs">
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-sm" style={{ background: it.color || "#6b7280" }} />
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-sm" style={{ background: it.color || "var(--muted-foreground)" }} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-foreground">{it.label}</span>
+                    <span className="block truncate text-popover-foreground">{it.label}</span>
                     {it.sub && <span className="block truncate text-muted-foreground">{it.sub}</span>}
                   </span>
                   <span className="shrink-0 text-muted-foreground">{it.hours.toFixed(1)}{unit}</span>
@@ -240,7 +239,7 @@ export function LineChart({
             const yy = pad.t + ch * (1 - g);
             return (
               <g key={g}>
-                <line x1={pad.l} y1={yy} x2={pad.l + cw} y2={yy} stroke="hsl(var(--border))" strokeWidth={1} opacity={0.5} />
+                <line x1={pad.l} y1={yy} x2={pad.l + cw} y2={yy} stroke="var(--border)" strokeWidth={1} />
                 <text x={pad.l - 6} y={yy + 3} textAnchor="end" className="fill-muted-foreground text-[9px]">
                   {Math.round(top * g)}{unit}
                 </text>
@@ -250,13 +249,13 @@ export function LineChart({
 
           {/* hover guide line */}
           {hover != null && (
-            <line x1={x(hover)} y1={pad.t} x2={x(hover)} y2={pad.t + ch} stroke="hsl(var(--primary))" strokeWidth={1} opacity={0.35} />
+            <line x1={x(hover)} y1={pad.t} x2={x(hover)} y2={pad.t + ch} stroke="var(--chart-1)" strokeWidth={1} opacity={0.35} />
           )}
 
-          <polyline points={pts} fill="none" stroke="hsl(var(--primary))" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          <polyline points={pts} fill="none" stroke="var(--chart-1)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           {data.map((d, i) => (
             <g key={i}>
-              <circle cx={x(i)} cy={y(d.value)} r={hover === i ? 5 : 3} fill="hsl(var(--primary))" />
+              <circle cx={x(i)} cy={y(d.value)} r={hover === i ? 5 : 3} fill="var(--chart-1)" />
               {i % labelEvery === 0 && (
                 <text x={x(i)} y={height - 6} textAnchor="middle" className="fill-muted-foreground text-[9px]">
                   {d.label}
@@ -281,7 +280,7 @@ export function LineChart({
       {/* tooltip */}
       {hv && hover != null && (
         <div
-          className="pointer-events-none absolute z-30 -translate-x-1/2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-center shadow-xl"
+          className="pointer-events-none absolute z-30 -translate-x-1/2 rounded-lg border border-border bg-popover px-2.5 py-1.5 text-center text-popover-foreground shadow-raised"
           style={{ left: Math.min(Math.max(40, x(hover)), W - 40), top: Math.max(0, y(hv.value) - 46) }}
         >
           <p className="text-sm font-semibold tabular-nums">{hv.value}{unit}</p>

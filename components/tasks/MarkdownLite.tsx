@@ -69,7 +69,7 @@ export function MarkdownLite({
       const level = (line.match(/^\s*(#{1,3})/)?.[1] ?? "#").length;
       const txt = line.replace(/^\s*#{1,3}\s+/, "");
       const cls =
-        level === 1 ? "text-base font-bold" : level === 2 ? "text-sm font-bold" : "text-sm font-semibold";
+        level === 1 ? "text-base font-semibold" : level === 2 ? "text-sm font-semibold" : "text-sm font-semibold";
       blocks.push(
         <p key={key++} className={cls}>
           {ri(txt)}

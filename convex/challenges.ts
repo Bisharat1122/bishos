@@ -16,11 +16,18 @@ export const list = query({
       .collect();
     return Promise.all(
       challenges.map(async (c) => {
-        const [sections, days] = await Promise.all([
+        const [sections, days, goal] = await Promise.all([
           ctx.db.query("challengeSections").withIndex("by_challenge", (q) => q.eq("challengeId", c._id)).collect(),
           ctx.db.query("challengeDays").withIndex("by_challenge", (q) => q.eq("challengeId", c._id)).collect(),
+          c.goalId ? ctx.db.get(c.goalId) : Promise.resolve(null),
         ]);
-        return { ...c, sectionCount: sections.length, dayCount: days.length };
+        return {
+          ...c,
+          sectionCount: sections.length,
+          dayCount: days.length,
+          // Life OS link: the 12-week goal this challenge serves.
+          goalTitle: goal && goal.userId === userId ? goal.title : null,
+        };
       }),
     );
   },
@@ -128,12 +135,22 @@ export const update = mutation({
     color: v.optional(v.string()),
     icon: v.optional(v.string()),
     primaryLifeAreaId: v.optional(v.id("lifeAreas")),
+    // Life OS: link to a 12-week goal (null clears).
+    goalId: v.optional(v.union(v.id("goals"), v.null())),
   },
-  handler: async (ctx, { id, ...rest }) => {
+  handler: async (ctx, { id, goalId, ...rest }) => {
     const userId = await requireUser(ctx);
     const c = await ctx.db.get(id);
     if (!c || c.userId !== userId) return;
-    await ctx.db.patch(id, rest);
+    const patch: Record<string, unknown> = { ...rest };
+    if (goalId !== undefined) {
+      if (goalId) {
+        const g = await ctx.db.get(goalId);
+        if (!g || g.userId !== userId) throw new Error("Goal not found");
+      }
+      patch.goalId = goalId ?? undefined;
+    }
+    await ctx.db.patch(id, patch);
   },
 });
 
@@ -189,8 +206,8 @@ export const linkHabit = mutation({
   args: { id: v.id("challenges"), habitId: v.id("habits") },
   handler: async (ctx, { id, habitId }) => {
     const userId = await requireUser(ctx);
-    const h = await ctx.db.get(habitId);
-    if (!h || h.userId !== userId) return;
+    const [c, h] = await Promise.all([ctx.db.get(id), ctx.db.get(habitId)]);
+    if (!c || c.userId !== userId || !h || h.userId !== userId) return;
     await ctx.db.patch(habitId, { challengeId: id });
   },
 });

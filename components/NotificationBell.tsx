@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { dateOf, useToday } from "@/lib/day";
 import {
-  Bell, X, ListTodo, Target, FolderKanban, Repeat, CalendarRange, CalendarCheck, Check,
+  Bell, X, ListTodo, Target, FolderKanban, Repeat, CalendarRange, CalendarCheck, Check, Sun, Kanban, Handshake, Inbox, Brain,
 } from "lucide-react";
+import { buttonVariants } from "@/lib/variants";
 import { cn } from "@/lib/utils";
 
 const ICON: Record<string, typeof Bell> = {
@@ -16,11 +18,19 @@ const ICON: Record<string, typeof Bell> = {
   habit: Repeat,
   schedule: CalendarRange,
   checkin: CalendarCheck,
+  ritual: Sun,
+  deal: Kanban,
+  commitment: Handshake,
+  inbox: Inbox,
+  recall: Brain,
 };
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const items = useQuery(api.notifications.list);
+  // Client-local day so "due today" / habit / ritual nudges match the user's timezone.
+  const today = useToday();
+  const dayStart = useMemo(() => dateOf(today).getTime(), [today]);
+  const items = useQuery(api.notifications.listForDay, { today, dayStart });
   const dismiss = useMutation(api.notifications.dismiss);
   const dismissAll = useMutation(api.notifications.dismissAll);
 
@@ -32,13 +42,14 @@ export function NotificationBell() {
       <button
         onClick={() => setOpen((o) => !o)}
         title="Notifications"
-        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground hover:text-foreground"
+        aria-label={`Notifications${count ? `, ${count} unread` : ""}`}
+        className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative text-muted-foreground")}
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-5 w-5" />
         {count > 0 && (
           <span className={cn(
-            "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white",
-            urgent > 0 ? "bg-warning" : "bg-primary",
+            "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-background",
+            urgent > 0 ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground",
           )}>
             {count > 9 ? "9+" : count}
           </span>
@@ -48,7 +59,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+          <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-raised">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <p className="text-sm font-semibold">
                 Notifications {count > 0 && <span className="text-muted-foreground">({count})</span>}
@@ -66,17 +77,17 @@ export function NotificationBell() {
             <div className="max-h-[60vh] overflow-y-auto">
               {count === 0 && (
                 <div className="flex flex-col items-center justify-center gap-1 py-10 text-center">
-                  <Check className="h-6 w-6 text-primary" />
+                  <Check className="h-6 w-6 text-success" />
                   <p className="text-sm text-muted-foreground">You&apos;re all caught up</p>
                 </div>
               )}
               {items?.map((n) => {
                 const Icon = ICON[n.type] ?? Bell;
                 return (
-                  <div key={n.key} className="group flex items-start gap-2.5 border-b border-border/60 px-3 py-2.5 hover:bg-muted/30">
+                  <div key={n.key} className="group flex items-start gap-2.5 border-b border-border/60 px-3 py-2.5 hover:bg-accent/60">
                     <span className={cn(
                       "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
-                      n.severity === "urgent" ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
+                      n.severity === "urgent" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground",
                     )}>
                       <Icon className="h-3.5 w-3.5" />
                     </span>
@@ -87,7 +98,8 @@ export function NotificationBell() {
                     <button
                       onClick={() => void dismiss({ key: n.key })}
                       title="Dismiss"
-                      className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition hover:text-foreground group-hover:opacity-100"
+                      aria-label="Dismiss notification"
+                      className="shrink-0 rounded p-1 text-muted-foreground opacity-100 transition hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>

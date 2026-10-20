@@ -7,6 +7,7 @@ import { Check, CalendarRange, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui";
 import { ymdLocal } from "./ScheduleBlockModal";
 import { cn } from "@/lib/utils";
+import { useTz } from "@/components/direction/util";
 
 const minToLabel = (m: number) => {
   let h = Math.floor(m / 60);
@@ -19,6 +20,7 @@ const minToLabel = (m: number) => {
 /** Today's schedule with quick done-toggles. Used on the check-in & dashboard. */
 export function TodaySchedule({ className }: { className?: string }) {
   const today = ymdLocal(new Date());
+  const tz = useTz();
   const blocks = useQuery(api.schedule.day, { date: today });
   const setStatus = useMutation(api.schedule.setStatus).withOptimisticUpdate((store, { id, status }) => {
     const cur = store.getQuery(api.schedule.day, { date: today });
@@ -58,7 +60,7 @@ export function TodaySchedule({ className }: { className?: string }) {
               )}
             >
               <button
-                onClick={() => void setStatus({ id: b._id, status: done ? "planned" : "done" })}
+                onClick={() => void setStatus({ id: b._id, status: done ? "planned" : "done", tz }).catch(() => {})}
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition",
                   done ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40 text-transparent hover:border-primary",

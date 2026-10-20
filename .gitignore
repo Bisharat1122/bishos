@@ -10,3 +10,7 @@ next-env.d.ts
 
 # Local source media (served copy lives in public/music)
 assets
+
+# Generated manual (the served copy is public/bishOS-Guide.pdf; rebuild with scripts/build-guide.mjs)
+/docs/bishOS-Guide.html
+/docs/bishOS-Guide.pdf

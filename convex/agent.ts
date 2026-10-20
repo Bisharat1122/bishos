@@ -501,8 +501,10 @@ export const moduleFacts = internalQuery({
 export const insertUser = internalMutation({
   args: { threadId: v.id("aiThreads"), content: v.string() },
   handler: async (ctx, { threadId, content }) => {
+    // Called from the moduleChat action — auth propagates, so check the caller owns the thread.
+    const userId = await requireUser(ctx);
     const thread = await ctx.db.get(threadId);
-    if (!thread) throw new Error("Thread not found");
+    if (!thread || thread.userId !== userId) throw new Error("Thread not found");
     await ctx.db.insert("aiMessages", { userId: thread.userId, threadId, role: "user", content });
   },
 });
@@ -1109,7 +1111,9 @@ export const ensureModuleThread = mutation({
 export const clearModuleThread = mutation({
   args: { threadId: v.id("aiThreads") },
   handler: async (ctx, { threadId }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    const thread = await ctx.db.get(threadId);
+    if (!thread || thread.userId !== userId) return;
     const msgs = await ctx.db
       .query("aiMessages")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))

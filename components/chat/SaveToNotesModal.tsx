@@ -5,8 +5,10 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { Modal } from "@/components/ui";
+import { toast, errorMessage } from "@/components/os/celebrate";
 import { FilePlus2, FilePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/lib/variants";
 
 /** Save an AI message into a note — new note or appended to an existing one. */
 export function SaveToNotesModal({
@@ -44,7 +46,10 @@ export function SaveToNotesModal({
       } else if (existingId) {
         await appendNote({ id: existingId as Id<"notes">, content });
       }
+      toast(mode === "new" ? "Saved as a new note" : "Appended to the note", { tone: "success" });
       onClose();
+    } catch (e) {
+      toast(errorMessage(e, "Couldn't save to notes."), { tone: "warning" });
     } finally {
       setSaving(false);
     }
@@ -55,7 +60,7 @@ export function SaveToNotesModal({
   return (
     <Modal title="Save to notes" onClose={onClose}>
       {/* mode toggle */}
-      <div className="mb-4 flex rounded-full border border-border p-0.5">
+      <div className="mb-4 flex items-center rounded-lg bg-muted p-[3px] text-muted-foreground">
         {([
           { k: "new", label: "New note", icon: FilePlus2 },
           { k: "existing", label: "Existing note", icon: FilePlus },
@@ -64,8 +69,8 @@ export function SaveToNotesModal({
             key={t.k}
             onClick={() => setMode(t.k)}
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-sm font-medium transition",
-              mode === t.k ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-colors",
+              mode === t.k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             )}
           >
             <t.icon className="h-4 w-4" />
@@ -87,7 +92,7 @@ export function SaveToNotesModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Note title…"
-            className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-primary/60"
+            className="w-full rounded-md border border-input bg-card shadow-xs px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
           />
           <div className="grid grid-cols-2 gap-3">
             <select
@@ -96,7 +101,7 @@ export function SaveToNotesModal({
                 setAreaId(e.target.value);
                 setSectionId("");
               }}
-              className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
+              className="rounded-md border border-input bg-card shadow-xs focus:border-ring focus:ring-[3px] focus:ring-ring/30 px-3 py-2.5 text-sm outline-none"
             >
               <option value="">No life area</option>
               {areas?.map((a) => (
@@ -109,7 +114,7 @@ export function SaveToNotesModal({
               value={sectionId}
               onChange={(e) => setSectionId(e.target.value)}
               disabled={!areaId}
-              className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none disabled:opacity-50"
+              className="rounded-md border border-input bg-card shadow-xs focus:border-ring focus:ring-[3px] focus:ring-ring/30 px-3 py-2.5 text-sm outline-none disabled:opacity-50"
             >
               <option value="">No section</option>
               {areaSections.map((s) => (
@@ -124,7 +129,7 @@ export function SaveToNotesModal({
         <select
           value={existingId}
           onChange={(e) => setExistingId(e.target.value)}
-          className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm outline-none"
+          className="w-full rounded-md border border-input bg-card shadow-xs focus:border-ring focus:ring-[3px] focus:ring-ring/30 px-3 py-2.5 text-sm outline-none"
         >
           <option value="">Choose a note…</option>
           {notes?.map((n) => (
@@ -138,7 +143,7 @@ export function SaveToNotesModal({
       <button
         onClick={() => void save()}
         disabled={!canSave || saving}
-        className="mt-4 w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        className={cn(buttonVariants(), "mt-4 w-full")}
       >
         {saving ? "Saving…" : mode === "new" ? "Create note" : "Append to note"}
       </button>
