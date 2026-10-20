@@ -14,11 +14,17 @@ import { RitualHost } from "@/components/rituals/RitualHost";
 import { MobileNav } from "@/components/os/MobileNav";
 import { AchievementWatcher } from "@/components/os/Achievements";
 import { Warmup } from "@/components/os/Warmup";
+import { PageSkeleton } from "@/components/os/PageSkeleton";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  // Pages render on the client only (they're live Convex views). The static
+  // HTML ships the shell + a skeleton, which also keeps build-time dates out
+  // of hydration. After the first mount this stays true across navigations.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Register the push service worker once so desktop notifications can be
   // delivered even when the app isn't the focused tab.
@@ -76,7 +82,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Logo />
         </div>
 
-        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">{mounted ? children : <PageSkeleton />}</main>
       </div>
 
       {/* Floating per-module agentic assistant (renders only on module routes) */}

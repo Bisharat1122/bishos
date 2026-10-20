@@ -22,7 +22,7 @@ type Draft = { explanation: string; jargon: string[]; hook: string; posts: { ang
 
 export function MakePublicDialog({ noteId, open, onClose }: { noteId: Id<"notes">; open: boolean; onClose: () => void }) {
   const today = useToday();
-  const note = useQuery(api.notes.get, open ? { id: noteId } : "skip");
+  const note = useQuery(api.notes.get, { id: noteId });
   const draftAi = useAction(api.aiLearning.feynmanDraft);
   const makePublic = useMutation(api.learning.makePublic);
   const addGap = useMutation(api.learning.addGap);

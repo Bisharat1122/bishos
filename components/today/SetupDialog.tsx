@@ -70,7 +70,7 @@ const PRESETS: Draft[] = [
 ];
 
 export function SetupDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const status = useQuery(api.onboarding.status, open ? {} : "skip");
+  const status = useQuery(api.onboarding.status, {});
   const setup = useMutation(api.onboarding.setupAreas);
   const finish = useMutation(api.onboarding.finish);
   const [drafts, setDrafts] = useState<Draft[]>(PRESETS);

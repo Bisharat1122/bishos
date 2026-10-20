@@ -2,10 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // Speed: keep prefetched + visited pages in the client router cache so
-  // switching pages is instant (page data is live via Convex anyway).
+  // Speed: pages are static client shells (all data is live via Convex), so
+  // keep prefetched + visited payloads in the client router cache for 30 min —
+  // switching pages never waits on the network. Warmup re-prefetches.
   experimental: {
-    staleTimes: { dynamic: 300, static: 600 },
+    staleTimes: { dynamic: 1800, static: 1800 },
     optimizePackageImports: ["lucide-react"],
   },
   webpack: (config) => {

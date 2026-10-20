@@ -23,7 +23,7 @@ export function PersonDialog({
   onCreated?: (id: Id<"people">) => void;
 }) {
   const create = useMutation(api.people.create);
-  const companies = useQuery(api.people.companies, open ? {} : "skip");
+  const companies = useQuery(api.people.companies, {});
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [title, setTitle] = useState("");

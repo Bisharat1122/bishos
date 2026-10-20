@@ -66,7 +66,7 @@ export function AchievementWatcher() {
 
 export function TrophyCase({ open, onClose }: { open: boolean; onClose: () => void }) {
   const today = useToday();
-  const data = useQuery(api.game.achievements, open ? { today } : "skip");
+  const data = useQuery(api.game.achievements, { today });
   return (
     <Dialog open={open} onClose={onClose} title={data ? `Achievements · ${data.unlocked}/${data.total}` : "Achievements"} size="lg">
       {!data ? (

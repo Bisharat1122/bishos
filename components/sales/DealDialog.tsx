@@ -26,8 +26,8 @@ export function DealDialog({
 }) {
   const today = useToday();
   const create = useMutation(api.deals.create);
-  const opts = useQuery(api.deals.options, open ? {} : "skip");
-  const companies = useQuery(api.people.companies, open ? {} : "skip");
+  const opts = useQuery(api.deals.options, {});
+  const companies = useQuery(api.people.companies, {});
   const [title, setTitle] = useState("");
   const [personId, setPersonId] = useState<Id<"people"> | null>(null);
   const [companyName, setCompanyName] = useState("");

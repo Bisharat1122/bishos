@@ -26,6 +26,7 @@ import { TaskDetailPanel } from "@/components/tasks/TaskDetailPanel";
 import { parseQuickTask } from "@/lib/parse";
 import { addDaysYmd, clockLabel, fmtMin, fmtYmd, greeting, relDay, useNowMin } from "@/lib/day";
 import { openCapture, openRitual } from "@/lib/osEvents";
+import { patchTaskStatus } from "@/components/os/optimistic";
 
 export default function TodayPage() {
   return (
@@ -40,8 +41,11 @@ function Today() {
   const params = useSearchParams();
   const { args, data } = useCockpit();
   const onboarding = useQuery(api.onboarding.status);
-  const toggleTop = useMutation(api.days.toggleTop);
-  const setStatus = useMutation(api.tasks.setStatus);
+  // Optimistic: the check mark flips on click, not after the round-trip.
+  const toggleTop = useMutation(api.days.toggleTop).withOptimisticUpdate((store, { taskId }) =>
+    patchTaskStatus(store, taskId, (cur) => (cur === "done" ? "not_started" : "done")),
+  );
+  const setStatus = useMutation(api.tasks.setStatus).withOptimisticUpdate((store, { id, status }) => patchTaskStatus(store, id, status));
   const updateTask = useMutation(api.tasks.update);
   const createTask = useMutation(api.tasks.create);
   const setTop3 = useMutation(api.days.setTop3);

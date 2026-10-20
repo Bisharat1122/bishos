@@ -275,7 +275,7 @@ export function RecurringDialog({
   const money = useMoney(meta.currency);
   const create = useMutation(api.finance.createRecurring);
   const update = useMutation(api.finance.updateRecurring);
-  const links = useQuery(api.finance.linkOptions, open ? {} : "skip");
+  const links = useQuery(api.finance.linkOptions, {});
 
   const [type, setType] = useState<"expense" | "income">("expense");
   const [name, setName] = useState("");

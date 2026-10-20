@@ -15,7 +15,7 @@ export function HookPicker({ onPick, align = "left" }: { onPick: (h: Hook) => vo
   const [q, setQ] = useState("");
   const [type, setType] = useState<string>("all");
   const ref = useRef<HTMLDivElement>(null);
-  const hooks = useQuery(api.swipes.listHooks, open ? {} : "skip");
+  const hooks = useQuery(api.swipes.listHooks, {});
   const countUse = useMutation(api.swipes.useHook);
   const addStarter = useMutation(api.swipes.addStarterHooks);
 

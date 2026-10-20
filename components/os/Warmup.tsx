@@ -9,6 +9,8 @@
 
 import { Component, ReactNode, useEffect, useState } from "react";
 import { useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
+import { ALL_NAV } from "@/lib/nav";
 import { api } from "@/convex/_generated/api";
 import { useCoarseNow, useDayArgs } from "./useCockpit";
 import { addDaysYmd, dateOf, mondayOf } from "@/lib/day";
@@ -129,7 +131,30 @@ function Queries() {
   useQuery(api.swipes.list, {});
   useQuery(api.swipes.stats, {});
   useQuery(api.contentSystem.watchlist, {});
+  // Dialog pickers
+  useQuery(api.swipes.listHooks, {});
+  useQuery(api.finance.linkOptions, {});
 
+  return null;
+}
+
+/**
+ * Route side of the warm-up: pull every page's (static) payload into the
+ * client router cache, so a click on any nav item, palette entry or
+ * `router.push` button switches instantly with no network wait. Re-runs
+ * inside the 30-min `staleTimes` window to stay warm.
+ */
+function Routes() {
+  const router = useRouter();
+  useEffect(() => {
+    const run = () => {
+      for (const n of ALL_NAV) router.prefetch(n.href);
+      router.prefetch("/profile");
+    };
+    run();
+    const id = setInterval(run, 25 * 60_000);
+    return () => clearInterval(id);
+  }, [router]);
   return null;
 }
 
@@ -148,6 +173,7 @@ export function Warmup() {
   if (!ready) return null;
   return (
     <Quiet>
+      <Routes />
       <Queries />
     </Quiet>
   );

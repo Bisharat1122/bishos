@@ -62,8 +62,8 @@ export function LogTouchDialog({
 }) {
   const today = useToday();
   const log = useMutation(api.people.logInteraction);
-  const deals = useQuery(api.deals.list, open ? { today } : "skip");
-  const dayBefore = useQuery(api.people.outreachToday, open ? { today } : "skip");
+  const deals = useQuery(api.deals.list, { today });
+  const dayBefore = useQuery(api.people.outreachToday, { today });
   const [kind, setKind] = useState<TouchKind>(defaultKind);
   const [summary, setSummary] = useState("");
   const [pid, setPid] = useState<Id<"people"> | null>(personId ?? null);
@@ -248,7 +248,7 @@ export function LogTouchButton({
   const [open, setOpen] = useState(false);
   const today = useToday();
   const log = useMutation(api.people.logInteraction);
-  const before = useQuery(api.people.outreachToday, quick ? { today } : "skip");
+  const before = useQuery(api.people.outreachToday, { today });
   const [busy, setBusy] = useState(false);
   const text = label ?? (quick ? "+1 touch" : "Log touch");
   const Icon = quick ? Zap : Plus;

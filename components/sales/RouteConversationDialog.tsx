@@ -46,7 +46,7 @@ function Check({ on, onChange, children }: { on: boolean; onChange: (b: boolean)
 export function RouteConversationDialog({ open, onClose, personId }: { open: boolean; onClose: () => void; personId?: Id<"people"> | null }) {
   const today = useToday();
   const route = useAction(api.aiRouting.routeConversation);
-  const areas = useQuery(api.lifeAreas.list, open ? {} : "skip");
+  const areas = useQuery(api.lifeAreas.list, {});
   const createPerson = useMutation(api.people.create);
   const createCommitment = useMutation(api.commitments.create);
   const createTask = useMutation(api.tasks.create);

@@ -303,7 +303,7 @@ function InvoiceDialog({
   const today = useToday();
   const create = useMutation(api.finance.createInvoice);
   const update = useMutation(api.finance.updateInvoice);
-  const links = useQuery(api.finance.linkOptions, open ? {} : "skip");
+  const links = useQuery(api.finance.linkOptions, {});
 
   const [dealId, setDealId] = useState("");
   const [title, setTitle] = useState("");

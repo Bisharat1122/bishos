@@ -84,7 +84,7 @@ export function CommitmentDialog({
   const today = useToday();
   const create = useMutation(api.commitments.create);
   const update = useMutation(api.commitments.update);
-  const deals = useQuery(api.deals.list, open ? { today } : "skip");
+  const deals = useQuery(api.deals.list, { today });
   const [title, setTitle] = useState("");
   const [direction, setDirection] = useState<Direction>("i_owe");
   const [personId, setPersonId] = useState<Id<"people"> | null>(null);

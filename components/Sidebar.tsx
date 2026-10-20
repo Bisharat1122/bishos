@@ -42,7 +42,17 @@ export function Sidebar({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
-  const pathname = usePathname();
+  const realPath = usePathname();
+  // Highlight the clicked item immediately (before the route commits) so a
+  // click always gives instant feedback.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  useEffect(() => setPendingHref(null), [realPath]);
+  useEffect(() => {
+    if (!pendingHref) return;
+    const t = setTimeout(() => setPendingHref(null), 4000); // navigation cancelled
+    return () => clearTimeout(t);
+  }, [pendingHref]);
+  const pathname = pendingHref ?? realPath;
   const router = useRouter();
   const { signOut } = useAuthActions();
   const [confirmOut, setConfirmOut] = useState(false);
@@ -165,8 +175,11 @@ export function Sidebar({
                             key={href}
                             href={href}
                             prefetch
-                            onClick={() => {
-                              if (!active) onNavStart?.();
+                            onClick={(e) => {
+                              if (!active) {
+                                onNavStart?.();
+                                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) setPendingHref(href);
+                              }
                               onNavigate?.();
                             }}
                             title={collapsed ? label : undefined}
@@ -200,8 +213,11 @@ export function Sidebar({
         <Link
           href="/profile"
           prefetch
-          onClick={() => {
-            if (pathname !== "/profile") onNavStart?.();
+          onClick={(e) => {
+            if (pathname !== "/profile") {
+              onNavStart?.();
+              if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) setPendingHref("/profile");
+            }
             onNavigate?.();
           }}
           title={collapsed ? "Profile" : undefined}

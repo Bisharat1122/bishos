@@ -8,6 +8,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { Repeat, Check, Flame, ChevronDown, Plus } from "lucide-react";
 import { cn, Section, buttonVariants } from "@/components/os/kit";
 import { reward, toast, celebrate, errorMessage } from "@/components/os/celebrate";
+import { patchHabitLog } from "@/components/os/optimistic";
 
 type Kind = "done" | "min" | "stretch" | "skip";
 export type StripHabit = {
@@ -25,7 +26,7 @@ export type StripHabit = {
 const KIND_LABEL: Record<Kind, string> = { done: "Done", min: "Minimum", stretch: "Stretch", skip: "Planned skip" };
 
 export function HabitStrip({ habits: fallback, date, lowEnergy }: { habits: StripHabit[]; date: string; lowEnergy?: boolean }) {
-  const log = useMutation(api.habits.log);
+  const log = useMutation(api.habits.log).withOptimisticUpdate((store, a) => patchHabitLog(store, a.id, a.date, a.kind));
   // Live, forgiving-streak view from the Habits module (falls back to the cockpit list).
   const live = useQuery(api.habits.today, { date });
   const habits: StripHabit[] = (live as StripHabit[] | undefined) ?? fallback;

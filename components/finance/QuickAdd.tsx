@@ -69,7 +69,7 @@ export function TransactionForm({
   const amountRef = useRef<HTMLInputElement>(null);
   const categoryTouched = useRef(!!initial?.categoryId);
 
-  const links = useQuery(api.finance.linkOptions, showLink ? {} : "skip");
+  const links = useQuery(api.finance.linkOptions, {});
   // Keep the transaction's own category selectable when editing (even if archived / other scope).
   const cats = useMemo(() => {
     const list = categoriesFor(meta.categories, type, scope);

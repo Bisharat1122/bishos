@@ -1144,7 +1144,7 @@ function QNext({ ctx }: { ctx: StepCtx }) {
 }
 
 function CycleWizardMount({ open, onClose, today, candidates }: { open: boolean; onClose: () => void; today: string; candidates: Candidate[] }) {
-  const cockpit = useQuery(api.cycles.cockpit, open ? { today } : "skip");
+  const cockpit = useQuery(api.cycles.cockpit, { today });
   const max = cockpit?.maxActiveGoals ?? 3;
   const cur = cockpit?.cycle;
   const closePrevious = cur && (cur.state.phase === "buffer" || cur.state.phase === "ended") ? { _id: cur._id, name: cur.name } : null;

@@ -79,7 +79,7 @@ export function QuickCapture() {
   const [count, setCount] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const areas = useQuery(api.lifeAreas.list, open ? {} : "skip");
+  const areas = useQuery(api.lifeAreas.list, {});
   const capture = useMutation(api.inbox.capture);
   const captureMany = useMutation(api.inbox.captureMany);
   const toTask = useMutation(api.inbox.toTask);

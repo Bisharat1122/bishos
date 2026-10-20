@@ -65,8 +65,8 @@ function Block({ title, icon: Icon, action, children }: { title: string; icon: t
 export function DealDrawer({ dealId, onClose }: { dealId: Id<"deals"> | null; onClose: () => void }) {
   const today = useToday();
   const data = useQuery(api.deals.get, dealId ? { id: dealId, today } : "skip");
-  const opts = useQuery(api.deals.options, dealId ? {} : "skip");
-  const companies = useQuery(api.people.companies, dealId ? {} : "skip");
+  const opts = useQuery(api.deals.options, {});
+  const companies = useQuery(api.people.companies, {});
   const update = useMutation(api.deals.update);
   const remove = useMutation(api.deals.remove);
   const mover = useDealMover();

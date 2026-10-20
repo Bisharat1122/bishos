@@ -112,7 +112,7 @@ export function SaveSwipeDialog({
   const update = useMutation(api.swipes.update);
   const saveBricks = useMutation(api.contentSystem.saveBricks);
   const analyse = useAction(api.aiContent.analyseSwipe);
-  const watch = useQuery(api.contentSystem.watchlist, open ? {} : "skip");
+  const watch = useQuery(api.contentSystem.watchlist, {});
   const [bricks, setBricks] = useState<Bricks>(NO_BRICKS);
   const [archetype, setArchetype] = useState("");
   const [creatorWatchId, setCreatorWatchId] = useState("");
